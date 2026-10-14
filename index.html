@@ -1,0 +1,3354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BROWN EYE 007 — Low-Poly N64 Espionage FPS</title>
+<style>
+  :root {
+    --n64-gold: #e8b838;
+    --n64-red: #d43828;
+    --n64-green: #38c864;
+    --n64-blue: #2a74d8;
+    --n64-cyan: #52d1e8;
+    --n64-amber: #f09028;
+    --folder-bg: #1b1d1e;
+    --folder-paper: #d7d0be;
+  }
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #08090a;
+    font-family: "Courier New", Courier, monospace;
+    color: #e6e6e6;
+  }
+  #game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #050608;
+  }
+  /* Crisp N64 low-res upscaled canvas */
+  #gl-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+  /* CRT / N64 scanline subtle overlay */
+  #scanlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.16) 3px,
+      rgba(0, 0, 0, 0.16) 4px
+    );
+    z-index: 4;
+  }
+  /* Damage / Alert flash overlay */
+  #flash-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease-out;
+    z-index: 5;
+  }
+
+  /* 3D Floating Speech Bubbles Layer */
+  #speech-bubble-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 8;
+    overflow: hidden;
+  }
+  .npc-speech-bubble {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    max-width: 295px;
+    min-width: 170px;
+    background: rgba(247, 244, 232, 0.96);
+    color: #111315;
+    border: 2.5px solid #16181c;
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.78);
+    padding: 8px 11px;
+    border-radius: 6px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12.5px;
+    line-height: 1.32;
+    font-weight: 700;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .npc-speech-bubble.cutscene-bubble {
+    max-width: 390px;
+    font-size: 14px;
+    border: 3px solid #2a74d8;
+    background: #fffdf6;
+    box-shadow: 0 0 18px rgba(42, 116, 216, 0.55), 5px 5px 0px rgba(0, 0, 0, 0.88);
+  }
+  .npc-speech-bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -11px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 11px 9px 0;
+    border-style: solid;
+    border-color: #16181c transparent;
+    display: block;
+    width: 0;
+  }
+  .npc-speech-bubble::before {
+    content: "";
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 9px 7px 0;
+    border-style: solid;
+    border-color: rgba(247, 244, 232, 0.96) transparent;
+    display: block;
+    width: 0;
+    z-index: 1;
+  }
+  .bubble-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #1b4b94;
+    border-bottom: 1px solid rgba(0,0,0,0.18);
+    padding-bottom: 3px;
+    margin-bottom: 4px;
+  }
+  .sheriff-badge-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    background: #ffffff;
+    border: 1px solid #222;
+    border-radius: 2px;
+    color: #1b60d8;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .bubble-topic-tag {
+    margin-left: auto;
+    background: #1d222b;
+    color: #e8b838;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+  }
+
+  /* HUD Layer */
+  #hud-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* GoldenEye-style Asymmetric Curved Side Health & Armor Bars */
+  #hud-left-bars {
+    position: absolute;
+    top: 68px;
+    left: 18px;
+    display: flex;
+    gap: 8px;
+    height: 210px;
+    align-items: flex-end;
+  }
+  .ge-bar-col {
+    width: 16px;
+    height: 100%;
+    background: rgba(10, 12, 16, 0.72);
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    padding: 2px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+  }
+  .ge-bar-segment {
+    flex: 1;
+    width: 100%;
+    opacity: 0.18;
+    transition: opacity 0.15s;
+  }
+  .ge-bar-segment.active {
+    opacity: 0.95;
+  }
+  .bar-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #ccc;
+    text-shadow: 1px 1px 0 #000;
+  }
+
+  /* Top-Left Telemetry & Stats Box */
+  #hud-top-left {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(12, 16, 22, 0.82);
+    border: 2px solid #4c5664;
+    padding: 7px 12px;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.75);
+  }
+  .hud-stat {
+    display: flex;
+    flex-direction: column;
+  }
+  .hud-stat-label {
+    font-size: 9.5px;
+    color: #9aa4b2;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .hud-stat-val {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f4f4f0;
+  }
+  .hud-divider {
+    width: 1px;
+    height: 26px;
+    background: #3d4654;
+  }
+
+  /* Top-Center Notification Banner */
+  #hud-banner {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(14, 18, 24, 0.9);
+    border: 2px solid var(--n64-gold);
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--n64-gold);
+    letter-spacing: 0.8px;
+    text-align: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.8);
+    max-width: 560px;
+    transition: opacity 0.25s;
+  }
+
+  /* Top-Right Minimap & Floor Radar */
+  #hud-radar-box {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    width: 196px;
+    background: rgba(10, 15, 20, 0.88);
+    border: 2px solid #4d5d6d;
+    padding: 6px;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.8);
+    pointer-events: auto;
+  }
+  #radar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #7ef29a;
+    margin-bottom: 4px;
+  }
+  #radar-canvas {
+    width: 180px;
+    height: 142px;
+    background: #06110b;
+    border: 1px solid #294c36;
+    display: block;
+    image-rendering: pixelated;
+  }
+  #radar-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: #a9b8c6;
+    margin-top: 4px;
+  }
+
+  /* Left Objectives Checklist Panel */
+  #hud-objectives {
+    position: absolute;
+    top: 292px;
+    left: 18px;
+    width: 248px;
+    background: rgba(12, 15, 20, 0.82);
+    border-left: 3px solid var(--n64-gold);
+    border-top: 1px solid #39424e;
+    border-right: 1px solid #39424e;
+    border-bottom: 1px solid #39424e;
+    padding: 8px 10px;
+    font-size: 11px;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.65);
+  }
+  .obj-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--n64-gold);
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .obj-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 4px;
+    color: #cbd2d9;
+    line-height: 1.25;
+  }
+  .obj-item.done {
+    color: #5ee685;
+    text-decoration: line-through;
+  }
+  .obj-item.optional {
+    color: #8ec5ff;
+  }
+
+  /* Crosshair */
+  #crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: "";
+    position: absolute;
+    background: rgba(120, 255, 140, 0.88);
+    box-shadow: 0 0 3px #000;
+  }
+  #crosshair::before {
+    top: 11px;
+    left: 3px;
+    width: 18px;
+    height: 2px;
+  }
+  #crosshair::after {
+    left: 11px;
+    top: 3px;
+    width: 2px;
+    height: 18px;
+  }
+
+  /* Center Context Action Prompt */
+  #interaction-prompt {
+    position: absolute;
+    top: 58%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(12, 16, 22, 0.92);
+    border: 2px solid #52d1e8;
+    color: #ffffff;
+    padding: 8px 15px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.85);
+    display: none;
+    pointer-events: auto;
+    cursor: pointer;
+    text-align: center;
+  }
+  #interaction-prompt .key-pill {
+    display: inline-block;
+    background: #52d1e8;
+    color: #081018;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-right: 5px;
+    font-weight: 900;
+  }
+
+  /* Eavesdrop / Small-Talk Radio Transcript Sub-panel (Bottom Left) */
+  #eavesdrop-box {
+    position: absolute;
+    bottom: 18px;
+    left: 18px;
+    width: 390px;
+    background: rgba(11, 14, 19, 0.88);
+    border: 2px solid #3c4a5c;
+    padding: 8px 11px;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.8);
+    pointer-events: auto;
+  }
+  .eavesdrop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #8fa3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #283240;
+    padding-bottom: 3px;
+  }
+  #eavesdrop-status {
+    color: #52d1e8;
+    font-weight: 700;
+  }
+  #eavesdrop-text {
+    font-size: 12px;
+    line-height: 1.35;
+    color: #e8e4d5;
+    min-height: 32px;
+  }
+  .eavesdrop-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .hud-mini-btn {
+    background: #1d2633;
+    color: #d6e2f0;
+    border: 1px solid #4e637e;
+    padding: 3px 8px;
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .hud-mini-btn:hover {
+    background: #2a74d8;
+    color: #fff;
+  }
+
+  /* Bottom-Right Weapon & Ammo Panel */
+  #hud-weapon-box {
+    position: absolute;
+    bottom: 18px;
+    right: 18px;
+    background: rgba(11, 14, 19, 0.88);
+    border: 2px solid #4c5664;
+    padding: 8px 13px;
+    min-width: 245px;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.8);
+    pointer-events: auto;
+  }
+  .weapon-slots {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .weapon-slot {
+    flex: 1;
+    text-align: center;
+    font-size: 10px;
+    padding: 3px 4px;
+    background: #181d24;
+    border: 1px solid #39424e;
+    color: #8c96a4;
+    cursor: pointer;
+  }
+  .weapon-slot.active {
+    background: #2c3847;
+    border-color: var(--n64-gold);
+    color: var(--n64-gold);
+    font-weight: 700;
+  }
+  .weapon-main-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  #weapon-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+  }
+  #weapon-ammo {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--n64-gold);
+  }
+  #weapon-sub {
+    font-size: 10px;
+    color: #9aa4b2;
+    margin-top: 2px;
+  }
+
+  /* Cutscene Letterbox & "CONTINUE" Modal Bar */
+  #cutscene-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 16;
+    display: none;
+  }
+  .letterbox-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 68px;
+    background: #000;
+    border-bottom: 2px solid #2b3442;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    pointer-events: auto;
+  }
+  .letterbox-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 118px;
+    background: rgba(4, 6, 10, 0.96);
+    border-top: 2px solid var(--n64-gold);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    gap: 20px;
+    pointer-events: auto;
+  }
+  #cutscene-dialogue-card {
+    flex: 1;
+  }
+  #cutscene-speaker {
+    font-size: 12px;
+    font-weight: 700;
+    color: #52d1e8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #cutscene-line {
+    font-size: 15px;
+    line-height: 1.4;
+    color: #f6f3e8;
+    font-weight: 700;
+  }
+  .cutscene-btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 175px;
+  }
+  #cutscene-continue-btn {
+    background: var(--n64-gold);
+    color: #0b0d10;
+    border: 2px solid #fff;
+    padding: 10px 18px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 #000;
+    text-transform: uppercase;
+  }
+  #cutscene-continue-btn:hover {
+    background: #ffd25a;
+    transform: translate(-1px, -1px);
+  }
+  #cutscene-skip-btn {
+    background: #1c222b;
+    color: #aab4c0;
+    border: 1px solid #455060;
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  /* 007 Dossier Briefing / Pause Watch / Debriefing Modal */
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 7, 10, 0.86);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    padding: 20px;
+  }
+  .dossier-folder {
+    width: 100%;
+    max-width: 840px;
+    max-height: 92vh;
+    overflow-y: auto;
+    background: #24211c;
+    border: 3px solid #8c7853;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.92);
+    padding: 22px 26px;
+    color: #e6dfd1;
+    position: relative;
+  }
+  .dossier-stamp {
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    border: 3px solid #c93b2b;
+    color: #c93b2b;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    transform: rotate(-5deg);
+    text-transform: uppercase;
+  }
+  .dossier-title {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--n64-gold);
+    letter-spacing: 2px;
+    margin: 0 0 4px 0;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .dossier-subtitle {
+    font-size: 12.5px;
+    color: #b5ab99;
+    margin-bottom: 14px;
+    border-bottom: 2px solid #4a4337;
+    padding-bottom: 8px;
+  }
+  .dossier-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .dossier-card {
+    background: rgba(14, 15, 17, 0.72);
+    border: 1px solid #4e473b;
+    padding: 12px 14px;
+  }
+  .dossier-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: var(--n64-gold);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #3a352c;
+    padding-bottom: 4px;
+  }
+  .dossier-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.48;
+    color: #d8d2c5;
+  }
+  .dossier-list li {
+    margin-bottom: 5px;
+  }
+  .dossier-btn-row {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    border-top: 2px solid #4a4337;
+    padding-top: 14px;
+  }
+  .btn-007 {
+    background: #8f2419;
+    color: #fff;
+    border: 2px solid var(--n64-gold);
+    padding: 11px 22px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 1.2px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 4px 4px 0 #000;
+  }
+  .btn-007:hover {
+    background: #b82d1f;
+  }
+  .btn-007.secondary {
+    background: #232a34;
+    border-color: #6c7d93;
+    font-size: 12.5px;
+    padding: 10px 16px;
+  }
+  .btn-007.secondary:hover {
+    background: #313d4d;
+  }
+
+  /* Quick Teleport / Tactical Test Bar (Top center-right helper for testing/navigation) */
+  #quick-nav-bar {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(11, 14, 19, 0.88);
+    border: 1px solid #445060;
+    padding: 5px 8px;
+    display: flex;
+    gap: 5px;
+    z-index: 12;
+    pointer-events: auto;
+  }
+  .qnav-btn {
+    background: #1a212b;
+    color: #b8c7d9;
+    border: 1px solid #3c4b5e;
+    font-family: inherit;
+    font-size: 10px;
+    padding: 4px 7px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .qnav-btn:hover {
+    background: #2a74d8;
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="gl-canvas" width="640" height="400"></canvas>
+  <div id="scanlines"></div>
+  <div id="flash-overlay"></div>
+
+  <!-- 3D Projected Speech Bubbles Container -->
+  <div id="speech-bubble-layer"></div>
+
+  <!-- Gameplay HUD -->
+  <div id="hud-layer">
+    <!-- Top Left Stats -->
+    <div id="hud-top-left">
+      <div class="hud-stat">
+        <span class="hud-stat-label">FLOOR / SECTOR</span>
+        <span class="hud-stat-val" id="hud-sector">2F - AIR VENT</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-stat">
+        <span class="hud-stat-label">EVIDENCE</span>
+        <span class="hud-stat-val" id="hud-evidence" style="color:#52d1e8;">0 / 6</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-stat">
+        <span class="hud-stat-label">EVASIVENESS</span>
+        <span class="hud-stat-val" id="hud-evasiveness" style="color:#38c864;">100% (GHOST)</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-stat">
+        <span class="hud-stat-label">GUARDS ACTIVE</span>
+        <span class="hud-stat-val" id="hud-guards" style="color:#f09028;">10</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-stat">
+        <span class="hud-stat-label">SCORE</span>
+        <span class="hud-stat-val" id="hud-score" style="color:#e8b838;">0</span>
+      </div>
+    </div>
+
+    <!-- Top Center Tactical Alert Banner -->
+    <div id="hud-banner">INFILTRATION: DROP FROM OVERHEAD VENT INTO 2F BATHROOM</div>
+
+    <!-- GoldenEye Left Side Health & Armor Curved Segment Bars -->
+    <div id="hud-left-bars">
+      <div class="bar-label">HEALTH</div>
+      <div class="ge-bar-col" id="health-bar-col"></div>
+      <div class="ge-bar-col" id="armor-bar-col"></div>
+      <div class="bar-label">ARMOR</div>
+    </div>
+
+    <!-- Objectives Panel -->
+    <div id="hud-objectives">
+      <div class="obj-title">
+        <span>007 OBJECTIVES</span>
+        <span id="hud-alarm-pill" style="color:#38c864;">STEALTH OK</span>
+      </div>
+      <div class="obj-item" id="obj-1"><span>[ ]</span><span>a. Drop from Vent into 2F Bathroom</span></div>
+      <div class="obj-item optional" id="obj-2"><span>[ ]</span><span>b. Collect War Crimes & Political Evidence (0/6) — <em>Reduces Evasiveness & +Guards</em></span></div>
+      <div class="obj-item optional" id="obj-3"><span>[ ]</span><span>c. Sabotage Utility HVAC (Smoke Bomb) OR Hack 1F Control Room</span></div>
+      <div class="obj-item" id="obj-4"><span>[ ]</span><span>d. Escape via 1F Warehouse Back Exit Door</span></div>
+    </div>
+
+    <!-- Top Right Minimap Radar -->
+    <div id="hud-radar-box">
+      <div id="radar-header">
+        <span id="radar-floor-label">RADAR: 2F UPPER</span>
+        <span style="color:#e8b838;">[M] FLOOR</span>
+      </div>
+      <canvas id="radar-canvas" width="180" height="142"></canvas>
+      <div id="radar-legend">
+        <span><b style="color:#38c864;">●</b> YOU</span>
+        <span><b style="color:#ff4d4d;">●</b> GUARD</span>
+        <span><b style="color:#52d1e8;">■</b> EVID</span>
+        <span><b style="color:#e8b838;">★</b> EXIT</span>
+      </div>
+    </div>
+
+    <!-- Center Crosshair & Context Prompt -->
+    <div id="crosshair"></div>
+    <div id="interaction-prompt" onclick="triggerContextInteraction()"></div>
+
+    <!-- Bottom Left Directional Mic / Guard Small-Talk Monitor -->
+    <div id="eavesdrop-box">
+      <div class="eavesdrop-header">
+        <span>DIRECTIONAL MIC // GUARD SMALL TALK</span>
+        <span id="eavesdrop-status">LISTENING...</span>
+      </div>
+      <div id="eavesdrop-text">Linger near guards to overhear small talk (TV shows, marital drama, Jerry Seinfeld's career). Speech bubbles appear over the speaker's head.</div>
+      <div class="eavesdrop-actions">
+        <button class="hud-mini-btn" onclick="triggerNearestGuardCutscene()">[C] Eavesdrop Cutscene (Press Continue Mode)</button>
+        <button class="hud-mini-btn" onclick="cycleConversationTopic()">[T] Next Guard Topic</button>
+        <button class="hud-mini-btn" onclick="togglePauseModal()">[TAB] 007 Dossier</button>
+      </div>
+    </div>
+
+    <!-- Bottom Center Tactical Room Jump / Assist Bar -->
+    <div id="quick-nav-bar">
+      <button class="qnav-btn" onclick="teleportToSpot('vent')" title="Start in 2F Vent">1: 2F Vent/Bath</button>
+      <button class="qnav-btn" onclick="teleportToSpot('lab2f')" title="2F Science Lab">2: 2F Science Lab</button>
+      <button class="qnav-btn" onclick="teleportToSpot('office2f')" title="2F Executive Office">3: 2F Office</button>
+      <button class="qnav-btn" onclick="teleportToSpot('stairs')" title="Stairwell 2F->1F">4: Stairs</button>
+      <button class="qnav-btn" onclick="teleportToSpot('control1f')" title="1F Control Room">5: 1F Control Rm</button>
+      <button class="qnav-btn" onclick="teleportToSpot('utility1f')" title="1F Utility Room">6: 1F Utility Rm</button>
+      <button class="qnav-btn" onclick="teleportToSpot('warehouse1f')" title="1F Warehouse Exit">7: 1F Exit Door</button>
+    </div>
+
+    <!-- Bottom Right Weapon Box -->
+    <div id="hud-weapon-box">
+      <div class="weapon-slots">
+        <div class="weapon-slot active" id="wslot-0" onclick="selectWeapon(0)">[1] PP7-S</div>
+        <div class="weapon-slot" id="wslot-1" onclick="selectWeapon(1)">[2] KF7</div>
+        <div class="weapon-slot" id="wslot-2" onclick="selectWeapon(2)">[3] SMOKE</div>
+        <div class="weapon-slot" id="wslot-3" onclick="selectWeapon(3)">[4] SLAP</div>
+      </div>
+      <div class="weapon-main-row">
+        <span id="weapon-name">PP7 SILENCED</span>
+        <span id="weapon-ammo">7 / 42</span>
+      </div>
+      <div id="weapon-sub">STEALTH FIREARM // LOW NOISE PROFILE</div>
+    </div>
+  </div>
+
+  <!-- Cutscene Letterbox Overlay (Requires pressing CONTINUE) -->
+  <div id="cutscene-overlay">
+    <div class="letterbox-top">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="background:#d43828;color:#fff;padding:2px 8px;font-size:11px;font-weight:900;">CUTSCENE MODE</span>
+        <span id="cutscene-title" style="color:#e8b838;font-weight:700;font-size:13px;">FACILITY INFILTRATION — 2F RESTROOM VENT</span>
+      </div>
+      <div style="font-size:11px;color:#9aa4b2;">PRESS <b>[CONTINUE]</b> OR <b>[SPACE/ENTER]</b> TO ADVANCE DIALOGUE</div>
+    </div>
+    <div class="letterbox-bottom">
+      <div id="cutscene-dialogue-card">
+        <div id="cutscene-speaker">
+          <span class="sheriff-badge-icon">★</span>
+          <span id="cutscene-speaker-name">GUARD SCHULTZ</span>
+        </div>
+        <div id="cutscene-line">"..."</div>
+      </div>
+      <div class="cutscene-btn-group">
+        <button id="cutscene-continue-btn" onclick="advanceCutscene()">CONTINUE ▶</button>
+        <button id="cutscene-skip-btn" onclick="endCutscene()">SKIP CUTSCENE [ESC]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mission Briefing / Pause Dossier Modal -->
+  <div class="modal-backdrop" id="dossier-modal">
+    <div class="dossier-folder">
+      <div class="dossier-stamp" id="dossier-stamp-text">TOP SECRET // 00-EYES ONLY</div>
+      <h1 class="dossier-title" id="dossier-header">OPERATION: BROWN EYE</h1>
+      <div class="dossier-subtitle" id="dossier-subheader">
+        SECTOR: 2-FLOOR WAREHOUSE, OFFICE & BIO-LAB COMPLEX // N64 LOW-POLY TACTICAL SIMULATION
+      </div>
+
+      <div class="dossier-grid" id="dossier-body-grid">
+        <div class="dossier-card">
+          <h3>Mission Briefing & Background</h3>
+          <ul class="dossier-list">
+            <li><b>Infiltration:</b> You begin inside the overhead air duct above the <b>2nd-Floor Bathroom</b> (classic 007 Facility style). Knock out the vent louver and drop into the stall.</li>
+            <li><b>Hostile Force:</b> The facility is patrolled by authoritarian regime guards wearing <b>White Armbands with Blue Sheriff Stars</b>. Eliminate them quietly or slip past their patrol cones.</li>
+            <li><b>Optional Evidence (Risk vs. Score):</b> <b>6 classified evidence items</b> (war crimes dossiers & political manipulation wiretaps) are scattered across the 2F Offices, 2F/1F Science Labs, Control Room, and Warehouse. Grabbing evidence boosts your final score (+2,500 pts each), <b>reduces your Evasiveness (-12% each)</b>, and <b>deploys +2 extra patrolling guards</b> per pickup!</li>
+            <li><b>Utility & Control Rooms:</b> On Floor 1, plant a <b>Smoke Bomb in the Utility Room HVAC</b> to lure guards away from the exit, OR <b>Hack the Control Room Terminal</b> to unlock all doors & disable cameras (at risk of a hack backfire alarm!).</li>
+          </ul>
+        </div>
+        <div class="dossier-card">
+          <h3>Controls & Mechanics</h3>
+          <ul class="dossier-list">
+            <li><b>Move / Strafe:</b> <code>W A S D</code> or Arrow Keys</li>
+            <li><b>Turn / Aim:</b> Mouse (Click view to lock pointer) or <code>Q / E</code> &amp; <code>J / L</code></li>
+            <li><b>Fire / Use Gadget:</b> <code>Left Click</code> or <code>F</code></li>
+            <li><b>Interact (Doors, Evidence, Vent, Hack, Smoke Plant, Exit):</b> <code>E</code> or click center prompt</li>
+            <li><b>Weapons:</b> <code>1</code> PP7 Silenced | <code>2</code> KF7 Rifle | <code>3</code> Smoke Bomb | <code>4</code> Slap/Hack</li>
+            <li><b>Guard Small Talk:</b> Lingering near guards shows <b>3D Speech Bubbles</b> over their heads (auto-fading in gameplay). Press <code>C</code> anytime to enter <b>Cutscene Mode</b> where you press <b>CONTINUE</b> through dialogue.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="debrief-summary-box" style="display:none; margin-bottom:16px;" class="dossier-card"></div>
+
+      <div class="dossier-btn-row">
+        <button class="btn-007 secondary" onclick="startMissionWithIntroCutscene()">▶ START WITH VENT CUTSCENE</button>
+        <button class="btn-007" id="dossier-primary-btn" onclick="resumeOrStartGame()">▶ DEPLOY INTO VENT (START GAME)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// BROWN EYE 007 — LOW-POLY N64 3D FIRST-PERSON SHOOTER ENGINE
+// ============================================================================
+
+const canvas = document.getElementById('gl-canvas');
+const ctx = canvas.getContext('2d');
+const radarCanvas = document.getElementById('radar-canvas');
+const rctx = radarCanvas.getContext('2d');
+const bubbleLayer = document.getElementById('speech-bubble-layer');
+
+// Audio Synthesizer (Retro N64 SFX)
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) audioCtx = new AudioContextClass();
+  }
+}
+function playSound(type) {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'pp7') {
+      // Iconic silenced GoldenEye pew-thwip
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(95, now + 0.09);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.005, now + 0.095);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } else if (type === 'kf7') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(240, now);
+      osc.frequency.exponentialRampToValueAtTime(55, now + 0.14);
+      gain.gain.setValueAtTime(0.32, now);
+      gain.gain.exponentialRampToValueAtTime(0.005, now + 0.14);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } else if (type === 'pickup') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(660, now + 0.07);
+      osc.frequency.setValueAtTime(880, now + 0.14);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+      osc.start(now);
+      osc.stop(now + 0.26);
+    } else if (type === 'door') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(110, now);
+      osc.frequency.linearRampToValueAtTime(145, now + 0.25);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+      osc.start(now);
+      osc.stop(now + 0.29);
+    } else if (type === 'alarm') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(680, now);
+      osc.frequency.setValueAtTime(480, now + 0.15);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.32);
+      osc.start(now);
+      osc.stop(now + 0.33);
+    } else if (type === 'talk') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(190 + Math.random() * 90, now);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.005, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.055);
+    }
+  } catch (e) {}
+}
+
+// ============================================================================
+// 2-FLOOR MAP DEFINITION (24 x 20 Grid per Floor)
+// Tile codes:
+// 0 = Open floor
+// 1 = Concrete / Facility Wall
+// 2 = Bathroom White/Blue Tile Wall
+// 3 = Science Lab Clean Panel Wall
+// 4 = Executive Wood/Office Wall
+// 5 = Warehouse Corrugated Steel / Brick Wall
+// 6 = Control Room Tech Console Wall
+// 7 = Utility Room Hazard Pipe Wall
+// 8 = Sliding Security Door
+// 9 = Locked Exit Door (1F South Warehouse)
+// ============================================================================
+
+const MAP_W = 24;
+const MAP_H = 20;
+const TILE_SIZE = 3.0; // meters per tile
+
+// FLOOR 2 (Upper Level: Bathroom, Vent Drop, Exec Offices, Science Lab Alpha, Maze Hallways, 2 Stairwells down to 1F)
+const FLOOR2_GRID = [
+  //0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 0
+  [1,2,2,2,2,2,2,1,4,4,4,4,4,4,4,1,3,3,3,3,3,3,3,1], // 1
+  [1,2,0,0,0,0,2,1,4,0,0,0,0,0,4,1,3,0,0,0,0,0,3,1], // 2  Bathroom (2..5,2..5), Office (9..13,2..5), Science Lab 2F (17..21,2..6)
+  [1,2,0,0,0,0,2,1,4,0,0,0,0,0,4,1,3,0,0,0,0,0,3,1], // 3
+  [1,2,0,0,0,0,2,1,4,0,0,0,0,0,4,1,3,0,0,0,0,0,3,1], // 4
+  [1,2,0,0,0,0,8,0,8,0,0,0,0,0,8,0,8,0,0,0,0,0,3,1], // 5  Doors into North Maze Corridor
+  [1,2,2,2,8,2,2,1,4,4,4,8,4,4,4,1,3,0,0,0,0,0,3,1], // 6
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,3,3,8,3,3,3,1], // 7  Main 2F North-South / East-West Maze Hallway
+  [1,1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,0,0,1,1,1], // 8
+  [1,4,0,4,0,0,4,0,1,3,3,8,3,3,0,0,0,0,0,0,0,0,1,1], // 9
+  [1,4,8,4,0,0,4,0,1,3,0,0,0,3,1,1,1,0,1,1,1,0,1,1], // 10 Records Annex (4..5,9..12) & Bio-Lab Annex (10..12,10..13)
+  [1,4,0,4,0,0,8,0,1,3,0,0,0,3,1,0,0,0,1,0,0,0,1,1], // 11
+  [1,4,0,4,4,4,4,0,1,3,0,0,0,8,0,0,1,1,1,0,1,0,1,1], // 12
+  [1,1,0,0,0,0,0,0,1,3,3,3,3,3,1,0,0,0,0,0,1,0,1,1], // 13
+  [1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1], // 14
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1], // 15 South 2F Overlook Corridor leading to West & East Stairwells
+  [1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1], // 16
+  [1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1], // 17 STAIRWELLS AT (2..4, 17..18) and (19..21, 17..18)
+  [1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1], // 18
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  // 19
+];
+
+// FLOOR 1 (Ground Level: Stair Landings, Maze Hallways, Control Room, Utility Room, Cryo Lab, Main Warehouse & Back Exit)
+const FLOOR1_GRID = [
+  //0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // 0
+  [1,7,7,7,7,7,7,1,6,6,6,6,6,6,6,1,3,3,3,3,3,3,3,1], // 1
+  [1,7,0,0,0,0,7,1,6,0,0,0,0,0,6,1,3,0,0,0,0,0,3,1], // 2  1F Utility Room (2..5,2..6), 1F Control Room (9..13,2..6), 1F Cryo Science Lab (17..21,2..6)
+  [1,7,0,0,0,0,7,1,6,0,0,0,0,0,6,1,3,0,0,0,0,0,3,1], // 3
+  [1,7,0,0,0,0,7,1,6,0,0,0,0,0,6,1,3,0,0,0,0,0,3,1], // 4
+  [1,7,0,0,0,0,8,0,8,0,0,0,0,0,8,0,8,0,0,0,0,0,3,1], // 5
+  [1,7,7,7,8,7,7,1,6,6,6,8,6,6,6,1,3,3,3,8,3,3,3,1], // 6
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1], // 7  1F North Security Corridor
+  [1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,1,0,1,1], // 8  1F Maze Hallways
+  [1,1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,1,1,0,1,1], // 9
+  [1,1,0,1,0,1,1,1,0,1,1,8,1,1,1,1,0,1,0,0,0,0,1,1], // 10
+  [1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,1,0,1,1], // 11
+  [1,1,0,1,1,1,8,1,1,5,5,8,5,5,5,1,8,1,1,1,1,0,1,1], // 12 Bulkhead doors into Main Warehouse Bay
+  [1,1,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0,5,1,1,0,1,1], // 13 Main Warehouse Bay (5..17, 13..18)
+  [1,1,0,1,5,0,5,5,0,0,0,5,5,0,0,5,5,0,5,1,1,0,1,1], // 14 Warehouse Crates
+  [1,1,0,8,0,0,5,5,0,0,0,5,5,0,0,5,5,0,0,8,0,0,1,1], // 15
+  [1,1,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0,5,1,1,0,1,1], // 16
+  [1,1,0,0,0,1,5,0,5,0,0,0,0,0,5,0,5,1,1,0,0,0,1,1], // 17 Stair Landings at (2..4, 17..18) & (19..21, 17..18)
+  [1,1,0,0,0,1,5,0,0,0,0,0,0,0,0,0,5,1,1,0,0,0,1,1], // 18
+  [1,1,1,1,1,1,5,5,5,5,9,9,9,5,5,5,5,1,1,1,1,1,1,1]  // 19 Row 19 Col 10..12 = BACK EXIT DOOR (Code 9)
+];
+
+// ============================================================================
+// CONVERSATION BANK: GUARD SMALL TALK (SEINFELD, BAD TV, MARITAL ISSUES, ETC.)
+// ============================================================================
+const GUARD_CONVERSATIONS = [
+  {
+    topic: "JERRY SEINFELD'S CAREER",
+    lines: [
+      { speaker: "Guard Schultz", text: "I'm telling you, Jerry Seinfeld's 1998 HBO special 'I'm Telling You for the Last Time' is the peak of human civilization." },
+      { speaker: "Guard Brenner", text: "Preach, brother. Look at the man's career longevity! Nine flawless seasons on NBC, then 'Comedians in Cars Getting Coffee'? Unmatched." },
+      { speaker: "Guard Schultz", text: "People sleep on 'Bee Movie' too! Jerry wrote, produced, and voiced Barry B. Benson. Who else has the range to sue the human race for honey?" },
+      { speaker: "Guard Brenner", text: "If High Command ever bans my bootleg VHS tapes of Jerry's tight five on Pop-Tarts, I'm turning in my blue sheriff armband on the spot." }
+    ]
+  },
+  {
+    topic: "MARITAL ISSUES",
+    lines: [
+      { speaker: "Guard Kleist", text: "Brenda says I bring my 'commanding regime tone' to Taco Tuesday. All I asked was for a tactical perimeter around the guacamole bowl!" },
+      { speaker: "Guard Vogel", text: "You think that's rough? Helga moved her Peloton directly in front of my model train table. We haven't made eye contact since Thursday." },
+      { speaker: "Guard Kleist", text: "She wants us to do couples improv classes on Sunday. I wear a blue sheriff star on an armband for a living, Vogel—I don't do 'Yes, And'!" },
+      { speaker: "Guard Vogel", text: "Just apologize and buy her that air fryer she circled in the catalog, man. Happy spouse, quiet guard post." }
+    ]
+  },
+  {
+    topic: "BAD TV SHOWS",
+    lines: [
+      { speaker: "Guard Gruber", text: "Did you catch the season finale of 'CSI: Bavaria' last night? They zoomed into a reflection on a bratwurst and read a license plate three miles away." },
+      { speaker: "Guard Mahler", text: "That show jumped the shark in Season 6 when the golden retriever became Deputy Coroner. Yet somehow I still watch every week." },
+      { speaker: "Guard Gruber", text: "Still better than 'Real Housewives of Sector 7'. Forty-five minutes of yelling over lukewarm fondue." },
+      { speaker: "Guard Mahler", text: "Wake me up when they air a four-hour block of classic Seinfeld reruns. Now THAT is television writing." }
+    ]
+  },
+  {
+    topic: "SEINFELD OBSESSION",
+    lines: [
+      { speaker: "Officer Kranz", text: "Everyone claims Seinfeld was 'a show about nothing.' Wrong! It was a masterclass in observational symmetry! Every subplot converged in Act Three!" },
+      { speaker: "Dr. Richter", text: "I wrote my doctoral dissertation on Jerry's cadence when he says 'What is the deal with ovaltine?' The man is an American treasure." },
+      { speaker: "Officer Kranz", text: "Did you hear he still tours theaters doing 70 minutes of fresh material at age seventy? Meanwhile my knees pop walking down the 1F stairs." },
+      { speaker: "Dr. Richter", text: "Once this shift ends, we're watching 'The Contest' and 'The Marine Biologist' back-to-back in the Science Lab breakroom." }
+    ]
+  },
+  {
+    topic: "UNIFORMS & HOME LIFE",
+    lines: [
+      { speaker: "Guard Dieter", text: "Why did Command replace our emblems with white armbands and bright blue sheriff stars? Do we look like we're patrolling Tombstone, Arizona?" },
+      { speaker: "Guard Otto", text: "Don't question the branding department, Dieter. Besides, my wife says the blue star brings out my eyes—Right before she complains about my snoring." },
+      { speaker: "Guard Dieter", text: "My brother-in-law still hasn't returned my hedge trimmer from May, and now my wife invited him to stay in our guest room for three weeks!" },
+      { speaker: "Guard Otto", text: "That's a literal war crime. Tell him Jerry Seinfeld has a whole bit about houseguests overstaying past the 72-hour mark!" }
+    ]
+  }
+];
+
+// ============================================================================
+// CUTSCENE SCRIPTS (REQUIRES PLAYER TO PRESS "CONTINUE" TO ADVANCE)
+// ============================================================================
+const CUTSCENE_SCRIPTS = {
+  intro_vent: {
+    title: "INFILTRATION BRIEFING // 2F BATHROOM OVERHEAD VENT",
+    focusFloor: 2,
+    camX: 3.5 * TILE_SIZE,
+    camZ: 3.5 * TILE_SIZE,
+    camYaw: 0.7,
+    lines: [
+      {
+        speaker: "HQ HANDLER ('M-CONTROL')",
+        guardId: null,
+        text: "Agent Brown: You're inside the 2nd-floor air duct directly above the Restroom. Below you, two Blue-Star Regime guards are slacking off outside the stalls."
+      },
+      {
+        speaker: "Guard Schultz (2F Bathroom Corridor)",
+        guardId: 0,
+        text: "I don't care what anyone says, Jerry Seinfeld's stand-up run from 1987 to 1998 is the greatest artistic achievement of the 20th century."
+      },
+      {
+        speaker: "Guard Brenner (2F Bathroom Corridor)",
+        guardId: 1,
+        text: "100% agreed. Even my wife stopped arguing with me about the garage clutter when I put on Jerry's bit about lost socks!"
+      },
+      {
+        speaker: "HQ HANDLER ('M-CONTROL')",
+        guardId: null,
+        text: "Drop out of the vent into the bathroom stall. Grab any War Crimes & Political Manipulation evidence you find—but beware: each item lowers your Evasiveness and alerts extra patrol guards. Reach the 1F Back Exit Door!"
+      }
+    ]
+  },
+  science_lab_cutscene: {
+    title: "OVERHEARD IN 2F SCIENCE LAB ALPHA",
+    focusFloor: 2,
+    camX: 19.5 * TILE_SIZE,
+    camZ: 4.0 * TILE_SIZE,
+    camYaw: 1.5,
+    lines: [
+      {
+        speaker: "Dr. Richter (Chief Bio-Chemist)",
+        guardId: 3,
+        text: "Between synthesising mood-pacification isotopes and my wife demanding we redo the kitchen backsplash in subway tile, I am hanging by a thread, Kranz."
+      },
+      {
+        speaker: "Officer Kranz (Lab Security)",
+        guardId: 2,
+        text: "Just channel Jerry Seinfeld, Doctor! Remember when Jerry had his cabinets redone by Conrad in Season 8? 'Whatever you want, Jerry!' Pure comedy gold."
+      },
+      {
+        speaker: "Dr. Richter (Chief Bio-Chemist)",
+        guardId: 3,
+        text: "True... Anyway, keep an eye on that Synthetic Water Trial dossier on the lab table. If that leaks to the press, our Blue Sheriff Stars are toast."
+      }
+    ]
+  },
+  hack_success_cutscene: {
+    title: "1F CONTROL ROOM // MAINFRAME OVERRIDE SUCCESS",
+    focusFloor: 1,
+    camX: 11.5 * TILE_SIZE,
+    camZ: 3.5 * TILE_SIZE,
+    camYaw: -1.57,
+    lines: [
+      {
+        speaker: "AGENT BROWN (DECODER TERMINAL)",
+        guardId: null,
+        text: "Mainframe cipher accepted! Disabling all 2F/1F CCTV security cameras and unlocking the heavy Warehouse Back Exit magnetic seals..."
+      },
+      {
+        speaker: "Guard Gruber (Over Comms)",
+        guardId: 6,
+        text: "Uh, Control? All the camera feeds just switched to a 24-hour marathon of 'Seinfeld' Season 4. Best technical glitch ever!"
+      }
+    ]
+  },
+  hack_backfire_cutscene: {
+    title: "1F CONTROL ROOM // HACK BACKFIRE ALARM!",
+    focusFloor: 1,
+    camX: 11.5 * TILE_SIZE,
+    camZ: 3.5 * TILE_SIZE,
+    camYaw: -1.57,
+    lines: [
+      {
+        speaker: "MAINFRAME SECURITY AI",
+        guardId: null,
+        text: "⚠ INTRUSION COUNTERMEASURE TRIGGERED! HACK BACKFIRED! SOUNDING SECTOR ALARM AND DISPATCHING REINFORCEMENT SQUAD!"
+      },
+      {
+        speaker: "Guard Kleist (1F Patrol)",
+        guardId: 5,
+        text: "Alarm in the Control Room! Put down the TV Guide and check the lower corridors—somebody just tripped the mainframe!"
+      }
+    ]
+  },
+  smoke_planted_cutscene: {
+    title: "1F UTILITY ROOM // HVAC SMOKE BOMB DISTRACTION",
+    focusFloor: 1,
+    camX: 3.5 * TILE_SIZE,
+    camZ: 3.5 * TILE_SIZE,
+    camYaw: -1.57,
+    lines: [
+      {
+        speaker: "AGENT BROWN",
+        guardId: null,
+        text: "Smoke canister armed inside the primary HVAC intake turbine. Pumping dense distraction smoke into the Main Warehouse vents..."
+      },
+      {
+        speaker: "Guard Dieter (1F Warehouse Exit Post)",
+        guardId: 8,
+        text: "Cough! What is that—did the Utility boiler blow a gasket again?! Otto, leave the Back Exit door and come help me check the HVAC pipes!"
+      }
+    ]
+  }
+};
+
+// ============================================================================
+// GAME STATE, PLAYER, EVIDENCE, DOORS, CAMERAS, GUARDS
+// ============================================================================
+let gameState = {
+  running: false,
+  paused: true,
+  inCutscene: false,
+  currentCutscene: null,
+  cutsceneIndex: 0,
+  missionComplete: false,
+  missionFailed: false,
+  score: 0,
+  timeElapsed: 0,
+  shotsFired: 0,
+  shotsHit: 0,
+  guardsEliminated: 0,
+  evidenceCount: 0,
+  totalEvidence: 6,
+  evasiveness: 100, // Drops by 12% per evidence item grabbed
+  alarmTimer: 0,
+  smokePlanted: false,
+  controlsHacked: false,
+  hackBackfired: false,
+  hasLabCipher: false,
+  ventDropped: false,
+  radarFloorView: 2
+};
+
+// Player state (starts in 2F Overhead Air Vent above Bathroom)
+const player = {
+  x: 3.5 * TILE_SIZE,
+  y: 7.2, // 7.2 = Inside 2F Overhead Air Vent; 4.5 = Floor 2; 0.0 = Floor 1
+  z: 2.5 * TILE_SIZE,
+  yaw: 0.45,
+  pitch: -0.15,
+  floor: 2,
+  inVent: true,
+  health: 100,
+  armor: 100,
+  weaponIdx: 0,
+  bobPhase: 0,
+  muzzleFlash: 0,
+  weaponKick: 0
+};
+
+const WEAPONS = [
+  { name: "PP7 SILENCED", ammo: 7, maxMag: 7, reserve: 49, damage: 52, silent: true, desc: "STEALTH FIREARM // LOW NOISE PROFILE", cooldown: 0.24 },
+  { name: "KF7 SOVIET", ammo: 30, maxMag: 30, reserve: 90, damage: 38, silent: false, desc: "ASSAULT RIFLE // HIGH NOISE (ALERTS GUARDS)", cooldown: 0.11 },
+  { name: "SMOKE CANISTER", ammo: 2, maxMag: 2, reserve: 1, damage: 0, silent: true, desc: "TACTICAL DISTRACTION // PLANT IN UTILITY HVAC", cooldown: 0.6 },
+  { name: "00-SLAP & DECODER", ammo: 99, maxMag: 99, reserve: 99, damage: 60, silent: true, desc: "MELEE KARATE CHOP & TERMINAL HACKING UNIT", cooldown: 0.35 }
+];
+let weaponCooldownTimer = 0;
+
+// 6 Optional Evidence Pickups (War Crimes & Political Manipulation)
+let evidenceItems = [];
+let doors = [];
+let cameras = [];
+let guards = [];
+let smokeClouds = [];
+
+function initWorldEntities() {
+  evidenceItems = [
+    {
+      id: 1,
+      title: "War Crimes Ledger: Operation Blue Star",
+      category: "WAR CRIMES DOSSIER",
+      floor: 2,
+      x: 11.5 * TILE_SIZE,
+      z: 3.0 * TILE_SIZE,
+      collected: false,
+      color: "#f0c84b"
+    },
+    {
+      id: 2,
+      title: "Wiretap Reel: Senator Blackmail & Election Rigging",
+      category: "POLITICAL MANIPULATION",
+      floor: 2,
+      x: 5.0 * TILE_SIZE,
+      z: 10.5 * TILE_SIZE,
+      collected: false,
+      color: "#52d1e8"
+    },
+    {
+      id: 3,
+      title: "Lab Report: Municipal Water Pacification Isotope",
+      category: "WAR CRIMES BIO-DATA",
+      floor: 2,
+      x: 19.5 * TILE_SIZE,
+      z: 3.2 * TILE_SIZE,
+      collected: false,
+      color: "#5ee685"
+    },
+    {
+      id: 4,
+      title: "VHS Tape: Black-Site Prisoner Interrogation Log",
+      category: "WAR CRIMES ARCHIVE",
+      floor: 1,
+      x: 19.5 * TILE_SIZE,
+      z: 3.5 * TILE_SIZE,
+      collected: false,
+      color: "#f09028"
+    },
+    {
+      id: 5,
+      title: "Shipping Manifest: Prohibited Nerve Agent Crates",
+      category: "WAR CRIMES LOGISTICS",
+      floor: 1,
+      x: 11.5 * TILE_SIZE,
+      z: 15.5 * TILE_SIZE,
+      collected: false,
+      color: "#ff6666"
+    },
+    {
+      id: 6,
+      title: "Master Disk: Synthetic Media Outrage Algorithm",
+      category: "POLITICAL MANIPULATION",
+      floor: 1,
+      x: 11.5 * TILE_SIZE,
+      z: 2.8 * TILE_SIZE,
+      collected: false,
+      color: "#d48cff"
+    }
+  ];
+
+  // Extract doors from grids
+  doors = [];
+  for (let f = 1; f <= 2; f++) {
+    const grid = f === 2 ? FLOOR2_GRID : FLOOR1_GRID;
+    for (let r = 0; r < MAP_H; r++) {
+      for (let c = 0; c < MAP_W; c++) {
+        if (grid[r][c] === 8 || grid[r][c] === 9) {
+          doors.push({
+            floor: f,
+            r, c,
+            x: (c + 0.5) * TILE_SIZE,
+            z: (r + 0.5) * TILE_SIZE,
+            isExit: grid[r][c] === 9,
+            openAmount: 0, // 0 = closed, 1 = open
+            opening: false,
+            timer: 0
+          });
+        }
+      }
+    }
+  }
+
+  // Security Cameras
+  cameras = [
+    { id: 1, floor: 2, x: 10.5 * TILE_SIZE, z: 7.3 * TILE_SIZE, baseYaw: 0, yaw: 0, active: true },
+    { id: 2, floor: 1, x: 8.5 * TILE_SIZE, z: 7.3 * TILE_SIZE, baseYaw: 0.4, yaw: 0.4, active: true },
+    { id: 3, floor: 1, x: 11.5 * TILE_SIZE, z: 13.3 * TILE_SIZE, baseYaw: 1.57, yaw: 1.57, active: true }
+  ];
+
+  // Initial 10 Guards (in pairs having small talk + patrolling)
+  guards = [
+    // Pair 1: Outside 2F Bathroom discussing Jerry Seinfeld's career
+    createGuard(0, "Guard Schultz", 2, 4.5, 7.5, 0.2, 0, 0),
+    createGuard(1, "Guard Brenner", 2, 5.8, 7.5, 3.1, 0, 1),
+    // Pair 2: Inside 2F Science Lab discussing Seinfeld & Marital/Kitchen tile issues
+    createGuard(2, "Officer Kranz", 2, 18.2, 4.5, 0.1, 3, 0),
+    createGuard(3, "Dr. Richter", 2, 19.6, 4.5, 3.14, 3, 1),
+    // Pair 3: 2F Executive Office / Corridor discussing Marital Issues (Taco night / Peloton)
+    createGuard(4, "Guard Kleist", 2, 10.5, 4.2, 0.0, 1, 0),
+    createGuard(5, "Guard Vogel", 2, 12.0, 4.2, 3.14, 1, 1),
+    // Pair 4: 1F Control Room / North Corridor discussing Bad TV Shows (CSI Bavaria)
+    createGuard(6, "Guard Gruber", 1, 10.5, 4.2, 0.0, 2, 0),
+    createGuard(7, "Guard Mahler", 1, 12.0, 4.2, 3.14, 2, 1),
+    // Pair 5: 1F Warehouse Back Exit Door discussing Blue Sheriff Star armbands & Seinfeld
+    createGuard(8, "Guard Dieter", 1, 10.3, 17.5, 0.1, 4, 0),
+    createGuard(9, "Guard Otto", 1, 12.2, 17.5, 3.0, 4, 1)
+  ];
+}
+
+function createGuard(id, name, floor, tileX, tileZ, yaw, convIndex, roleInConv) {
+  return {
+    id,
+    name,
+    floor,
+    x: tileX * TILE_SIZE,
+    z: tileZ * TILE_SIZE,
+    homeX: tileX * TILE_SIZE,
+    homeZ: tileZ * TILE_SIZE,
+    yaw,
+    health: 100,
+    alive: true,
+    state: 'chatting', // 'chatting', 'patrol', 'suspicious', 'alert', 'distracted'
+    convIndex: convIndex % GUARD_CONVERSATIONS.length,
+    roleInConv,
+    currentBubbleText: null,
+    bubbleTimer: 0,
+    shootCooldown: 1.2 + Math.random() * 0.8,
+    patrolAngle: Math.random() * Math.PI * 2,
+    animPhase: Math.random() * 10
+  };
+}
+
+// Spawn additional patrol guards when player picks up Evidence!
+function spawnReinforcementGuards(evidencePickedCount) {
+  const spawnTemplates = [
+    { name: "Reinforcement Sgt. Weiss", floor: 2, tx: 14.5, tz: 11.5, conv: 0 },
+    { name: "Reinforcement Cpl. Beck", floor: 2, tx: 7.5, tz: 15.5, conv: 1 },
+    { name: "Reinforcement Pvt. Haas", floor: 1, tx: 6.5, tz: 11.5, conv: 2 },
+    { name: "Reinforcement Lt. Falk", floor: 1, tx: 15.5, tz: 11.5, conv: 3 },
+    { name: "Shock Trooper Strauss", floor: 1, tx: 8.5, tz: 16.5, conv: 4 },
+    { name: "Shock Trooper Lindner", floor: 1, tx: 14.5, tz: 16.5, conv: 0 },
+    { name: "Elite Guard Novak", floor: 1, tx: 11.5, tz: 11.5, conv: 2 },
+    { name: "Elite Guard Koenig", floor: 2, tx: 17.5, tz: 15.5, conv: 1 }
+  ];
+  // Spawn 2 guards per evidence pickup (or 1 if late)
+  for (let i = 0; i < 2; i++) {
+    const idx = ((evidencePickedCount - 1) * 2 + i) % spawnTemplates.length;
+    const tpl = spawnTemplates[idx];
+    const newId = guards.length;
+    const g = createGuard(newId, tpl.name, tpl.floor, tpl.tx, tpl.tz, Math.random() * 6.28, tpl.conv, i % 2);
+    g.state = 'patrol';
+    guards.push(g);
+  }
+}
+
+// ============================================================================
+// SMALL TALK CONVERSATION SCHEDULER & 3D FLOATING SPEECH BUBBLES
+// ============================================================================
+let globalConvTimer = 0;
+let globalConvStep = 0;
+
+function updateSmallTalkAndBubbles(dt) {
+  if (gameState.inCutscene) {
+    renderSpeechBubblesToDOM();
+    return;
+  }
+
+  globalConvTimer += dt;
+  if (globalConvTimer > 4.4) {
+    globalConvTimer = 0;
+    globalConvStep++;
+    // Trigger next line in each pair of un-alerted guards
+    for (const g of guards) {
+      if (!g.alive) {
+        g.currentBubbleText = null;
+        continue;
+      }
+      if (g.state === 'chatting' || g.state === 'patrol') {
+        const conv = GUARD_CONVERSATIONS[g.convIndex];
+        const lineIdx = globalConvStep % conv.lines.length;
+        const activeRole = lineIdx % 2;
+        if (g.roleInConv === activeRole) {
+          g.currentBubbleText = conv.lines[lineIdx].text;
+          g.bubbleTimer = 3.9; // Lingers then disappears after a short time in gameplay!
+        } else {
+          g.currentBubbleText = null;
+        }
+      } else if (g.state === 'distracted') {
+        g.currentBubbleText = "Wait—smoke in the Warehouse HVAC?! Heading to Utility Room to check the pipes!";
+        g.bubbleTimer = 3.5;
+      } else if (g.state === 'alert') {
+        if (Math.random() < 0.35) {
+          g.currentBubbleText = "INTRUDER! Blue-Star Squad, open fire!";
+          g.bubbleTimer = 2.2;
+        }
+      }
+    }
+  }
+
+  // Decay gameplay speech bubbles so they linger then disappear
+  let closestGuardLine = null;
+  let closestDist = 999;
+
+  for (const g of guards) {
+    if (!g.alive) continue;
+    if (g.bubbleTimer > 0) {
+      g.bubbleTimer -= dt;
+      if (g.bubbleTimer <= 0) {
+        g.currentBubbleText = null;
+      }
+    }
+    if (g.currentBubbleText && g.floor === player.floor) {
+      const d = Math.hypot(g.x - player.x, g.z - player.z);
+      if (d < closestDist && d < 22) {
+        closestDist = d;
+        const conv = GUARD_CONVERSATIONS[g.convIndex];
+        closestGuardLine = {
+          guard: g,
+          topic: conv ? conv.topic : "ALERT",
+          text: g.currentBubbleText
+        };
+      }
+    }
+  }
+
+  // Update Directional Mic transcript box in HUD
+  const eavesStatus = document.getElementById('eavesdrop-status');
+  const eavesText = document.getElementById('eavesdrop-text');
+  if (closestGuardLine) {
+    eavesStatus.textContent = `OVERHEARING: ${closestGuardLine.topic} (${closestDist.toFixed(1)}m)`;
+    eavesText.innerHTML = `<b style="color:#52d1e8;">${closestGuardLine.guard.name}:</b> "${closestGuardLine.text}"`;
+  } else {
+    eavesStatus.textContent = "SCANNING NEARBY GUARDS...";
+  }
+
+  renderSpeechBubblesToDOM();
+}
+
+// Project 3D world point (wx, wy, wz) to 2D screen coordinates
+function project3DToScreen(wx, wy, wz, camX, camY, camZ, camYaw, camPitch) {
+  const dx = wx - camX;
+  const dy = wy - camY;
+  const dz = wz - camZ;
+
+  // Rotate by yaw around Y axis
+  const cosY = Math.cos(camYaw);
+  const sinY = Math.sin(camYaw);
+  const rx = -dx * sinY + dz * cosY;
+  const rz1 = dx * cosY + dz * sinY;
+
+  // Rotate by pitch around X axis
+  const cosP = Math.cos(camPitch);
+  const sinP = Math.sin(camPitch);
+  const ry = dy * cosP - rz1 * sinP;
+  const rz = dy * sinP + rz1 * cosP;
+
+  if (rz <= 0.25) return null; // Behind camera
+
+  const fovScale = 0.85;
+  const aspect = window.innerWidth / window.innerHeight;
+  const ndcX = (rx / (rz * fovScale * aspect));
+  const ndcY = (ry / (rz * fovScale));
+
+  const screenX = (ndcX * 0.5 + 0.5) * window.innerWidth;
+  const screenY = (-ndcY * 0.5 + 0.5) * window.innerHeight;
+  return { x: screenX, y: screenY, depth: rz };
+}
+
+function renderSpeechBubblesToDOM() {
+  bubbleLayer.innerHTML = '';
+
+  const cam = getActiveCameraTransform();
+
+  // If in cutscene, show the active cutscene speaker's floating bubble over their head!
+  if (gameState.inCutscene && gameState.currentCutscene) {
+    const lineObj = gameState.currentCutscene.lines[gameState.cutsceneIndex];
+    if (lineObj && lineObj.guardId !== null && guards[lineObj.guardId]) {
+      const g = guards[lineObj.guardId];
+      const headY = (g.floor === 2 ? 4.5 : 0.0) + 2.05;
+      const proj = project3DToScreen(g.x, headY, g.z, cam.x, cam.y, cam.z, cam.yaw, cam.pitch);
+      if (proj && proj.x > 40 && proj.x < window.innerWidth - 40 && proj.y > 50 && proj.y < window.innerHeight - 90) {
+        const div = document.createElement('div');
+        div.className = 'npc-speech-bubble cutscene-bubble';
+        div.style.left = `${proj.x}px`;
+        div.style.top = `${proj.y}px`;
+        div.innerHTML = `
+          <div class="bubble-header">
+            <span class="sheriff-badge-icon">★</span>
+            <span>${g.name}</span>
+            <span class="bubble-topic-tag">CUTSCENE</span>
+          </div>
+          <div>"${lineObj.text}"</div>
+        `;
+        bubbleLayer.appendChild(div);
+      }
+    }
+    return;
+  }
+
+  // Mid-gameplay floating speech bubbles above speaking guards' heads
+  for (const g of guards) {
+    if (!g.alive || !g.currentBubbleText) continue;
+    if (g.floor !== player.floor && !player.inVent) continue;
+    const dist = Math.hypot(g.x - cam.x, g.z - cam.z);
+    if (dist > 23) continue;
+
+    const headY = (g.floor === 2 ? 4.5 : 0.0) + 1.98;
+    const proj = project3DToScreen(g.x, headY, g.z, cam.x, cam.y, cam.z, cam.yaw, cam.pitch);
+    if (!proj) continue;
+    if (proj.x < 60 || proj.x > window.innerWidth - 60 || proj.y < 50 || proj.y > window.innerHeight - 60) continue;
+
+    const conv = GUARD_CONVERSATIONS[g.convIndex];
+    const fadeOpacity = Math.min(1, g.bubbleTimer / 0.6);
+    const div = document.createElement('div');
+    div.className = 'npc-speech-bubble';
+    div.style.left = `${proj.x}px`;
+    div.style.top = `${proj.y}px`;
+    div.style.opacity = fadeOpacity.toFixed(2);
+    div.innerHTML = `
+      <div class="bubble-header">
+        <span class="sheriff-badge-icon" title="Blue Sheriff Star on White Armband">★</span>
+        <span>${g.name}</span>
+        <span class="bubble-topic-tag">${g.state === 'alert' ? 'COMBAT' : (conv ? conv.topic : 'CHAT')}</span>
+      </div>
+      <div>"${g.currentBubbleText}"</div>
+    `;
+    bubbleLayer.appendChild(div);
+  }
+}
+
+// ============================================================================
+// CUTSCENE SYSTEM (WITH MANDATORY "CONTINUE" BUTTON PROGRESSION)
+// ============================================================================
+function startCutscene(scriptKey) {
+  const script = CUTSCENE_SCRIPTS[scriptKey];
+  if (!script) return;
+  gameState.inCutscene = true;
+  gameState.currentCutscene = script;
+  gameState.cutsceneIndex = 0;
+  if (document.pointerLockElement) document.exitPointerLock();
+
+  document.getElementById('cutscene-overlay').style.display = 'block';
+  document.getElementById('cutscene-title').textContent = script.title;
+  updateCutsceneUI();
+  playSound('talk');
+}
+
+function updateCutsceneUI() {
+  if (!gameState.currentCutscene) return;
+  const lineObj = gameState.currentCutscene.lines[gameState.cutsceneIndex];
+  if (!lineObj) {
+    endCutscene();
+    return;
+  }
+  document.getElementById('cutscene-speaker-name').textContent =
+    `${lineObj.speaker} (${gameState.cutsceneIndex + 1}/${gameState.currentCutscene.lines.length})`;
+  document.getElementById('cutscene-line').textContent = `"${lineObj.text}"`;
+
+  // Orient camera toward speaking guard if specified
+  if (lineObj.guardId !== null && guards[lineObj.guardId]) {
+    const g = guards[lineObj.guardId];
+    const dx = g.x - gameState.currentCutscene.camX;
+    const dz = g.z - gameState.currentCutscene.camZ;
+    gameState.currentCutscene.camYaw = Math.atan2(-dx, dz);
+  }
+}
+
+function advanceCutscene() {
+  if (!gameState.inCutscene || !gameState.currentCutscene) return;
+  playSound('talk');
+  gameState.cutsceneIndex++;
+  if (gameState.cutsceneIndex >= gameState.currentCutscene.lines.length) {
+    endCutscene();
+  } else {
+    updateCutsceneUI();
+  }
+}
+
+function endCutscene() {
+  gameState.inCutscene = false;
+  gameState.currentCutscene = null;
+  document.getElementById('cutscene-overlay').style.display = 'none';
+}
+
+function triggerNearestGuardCutscene() {
+  // Find nearest living guard on current floor (or any floor) and launch a dynamic press-Continue cutscene!
+  let bestG = null;
+  let bestD = 999;
+  for (const g of guards) {
+    if (!g.alive) continue;
+    const d = Math.hypot(g.x - player.x, g.z - player.z) + (g.floor !== player.floor ? 30 : 0);
+    if (d < bestD) {
+      bestD = d;
+      bestG = g;
+    }
+  }
+  if (!bestG) return;
+
+  const conv = GUARD_CONVERSATIONS[bestG.convIndex];
+  const partner = guards.find(other => other.alive && other.id !== bestG.id && other.convIndex === bestG.convIndex) || bestG;
+
+  CUTSCENE_SCRIPTS.dynamic_eavesdrop = {
+    title: `EAVESDROPPING // ${conv.topic}`,
+    focusFloor: bestG.floor,
+    camX: bestG.x - Math.sin(bestG.yaw) * 3.8,
+    camZ: bestG.z - Math.cos(bestG.yaw) * 3.8,
+    camYaw: Math.atan2(-(bestG.x - (bestG.x - Math.sin(bestG.yaw) * 3.8)), bestG.z - (bestG.z - Math.cos(bestG.yaw) * 3.8)),
+    lines: conv.lines.map((l, idx) => ({
+      speaker: `${idx % 2 === 0 ? bestG.name : partner.name} [${conv.topic}]`,
+      guardId: idx % 2 === 0 ? bestG.id : partner.id,
+      text: l.text
+    }))
+  };
+  startCutscene('dynamic_eavesdrop');
+}
+
+function cycleConversationTopic() {
+  for (const g of guards) {
+    g.convIndex = (g.convIndex + 1) % GUARD_CONVERSATIONS.length;
+  }
+  globalConvTimer = 99; // Force immediate bubble refresh
+  setBanner("GUARD CONVERSATION TOPIC CYCLED (SEINFELD / BAD TV / MARITAL DRAMA)");
+}
+
+function getActiveCameraTransform() {
+  if (gameState.inCutscene && gameState.currentCutscene) {
+    const cs = gameState.currentCutscene;
+    const baseY = (cs.focusFloor === 2 ? 4.5 : 0.0) + 1.65;
+    return {
+      x: cs.camX,
+      y: baseY,
+      z: cs.camZ,
+      yaw: cs.camYaw,
+      pitch: -0.05,
+      floor: cs.focusFloor
+    };
+  }
+  const bobOffset = Math.sin(player.bobPhase) * 0.06;
+  return {
+    x: player.x,
+    y: player.y + (player.inVent ? 0.55 : 1.62) + bobOffset,
+    z: player.z,
+    yaw: player.yaw,
+    pitch: player.pitch,
+    floor: player.floor
+  };
+}
+
+// ============================================================================
+// LOW-POLY 3D ENGINE (RAYCASTED ARCHITECTURE + Z-BUFFERED 3D LOW-POLY MESHES)
+// Renders N64 GoldenEye crisp low-res 3D world, ceiling vents, bathroom stalls,
+// lab vats, control terminals, crates, and multi-part 3D blocky N64 guards
+// wearing white armbands with Blue Sheriff Stars!
+// ============================================================================
+const W = canvas.width;
+const H = canvas.height;
+const zBuffer = new Float32Array(W);
+
+function getTile(floor, tx, tz) {
+  if (tx < 0 || tx >= MAP_W || tz < 0 || tz >= MAP_H) return 1;
+  const grid = floor === 2 ? FLOOR2_GRID : FLOOR1_GRID;
+  return grid[tz][tx];
+}
+
+function isDoorOpenAt(floor, tx, tz) {
+  const d = doors.find(door => door.floor === floor && door.c === tx && door.r === tz);
+  if (!d) return false;
+  return d.openAmount > 0.65;
+}
+
+function isSolidAt(floor, wx, wz) {
+  const tx = Math.floor(wx / TILE_SIZE);
+  const tz = Math.floor(wz / TILE_SIZE);
+  const code = getTile(floor, tx, tz);
+  if (code === 0) return false;
+  if (code === 8 || code === 9) {
+    return !isDoorOpenAt(floor, tx, tz);
+  }
+  return true;
+}
+
+// Procedural N64 Wall Colors & Surface Patterns
+function sampleWallStyle(code, side, u, v, floor) {
+  // Returns { r, g, b }
+  let r = 120, g = 125, b = 130;
+  if (code === 1) {
+    // Facility Grey Concrete with N64 riveted trim
+    r = 108; g = 114; b = 122;
+    if (v < 0.12 || v > 0.88) { r = 72; g = 78; b = 86; }
+    else if (Math.abs(u - 0.5) < 0.03) { r = 90; g = 96; b = 104; }
+  } else if (code === 2) {
+    // 2F Bathroom Ceramic Tile (White/Blue N64 Facility Bathroom look)
+    const gx = Math.floor(u * 6);
+    const gy = Math.floor(v * 6);
+    const mortar = (u * 6 - gx < 0.08) || (v * 6 - gy < 0.08);
+    if (mortar) { r = 130; g = 140; b = 150; }
+    else if ((gx + gy) % 2 === 0) { r = 212; g = 220; b = 228; }
+    else { r = 165; g = 188; b = 212; }
+  } else if (code === 3) {
+    // Science Lab Clean White Panel + Hazard Stripe
+    r = 195; g = 205; b = 210;
+    if (v > 0.44 && v < 0.56) {
+      r = 45; g = 140; b = 175;
+    } else if (v > 0.85) {
+      const stripe = Math.floor((u + v) * 10) % 2 === 0;
+      r = stripe ? 215 : 40;
+      g = stripe ? 170 : 40;
+      b = 35;
+    }
+  } else if (code === 4) {
+    // Executive Office Wood Wainscoting & Cream Wallpaper
+    if (v > 0.55) {
+      r = 112; g = 74; b = 46;
+    } else {
+      r = 186; g = 176; b = 152;
+    }
+  } else if (code === 5) {
+    // Warehouse Industrial Ribbed Steel & Brick
+    const rib = Math.floor(u * 8) % 2 === 0;
+    r = rib ? 115 : 92;
+    g = rib ? 105 : 85;
+    b = rib ? 95 : 78;
+    if (v > 0.85) { r = 180; g = 135; b = 35; }
+  } else if (code === 6) {
+    // 1F Control Room GoldenEye Computer Bank Wall
+    r = 55; g = 65; b = 78;
+    if (v > 0.22 && v < 0.68 && u > 0.12 && u < 0.88) {
+      // Glowing CRT Monitor / Radar Screen
+      const cellX = Math.floor(u * 4);
+      const cellY = Math.floor(v * 4);
+      if ((cellX + cellY) % 2 === 0) {
+        r = 32; g = 175; b = 110;
+      } else {
+        r = 40; g = 130; b = 210;
+      }
+    }
+  } else if (code === 7) {
+    // 1F Utility Room HVAC Pipes & Grime Wall
+    r = 92; g = 100; b = 88;
+    if (Math.abs(v - 0.35) < 0.07 || Math.abs(v - 0.7) < 0.07) {
+      // Horizontal steam pipes
+      r = 175; g = 125; b = 55;
+    }
+  } else if (code === 8) {
+    // Sliding GoldenEye Bulkhead Door
+    r = 86; g = 96; b = 110;
+    if (Math.abs(u - 0.5) < 0.05) { r = 35; g = 40; b = 45; }
+    if (v > 0.42 && v < 0.58) { r = 195; g = 155; b = 45; }
+  } else if (code === 9) {
+    // 1F BACK EXIT DOOR (Heavy Steel Extraction Door with Glowing EXIT Sign)
+    r = 50; g = 95; b = 65;
+    if (v > 0.12 && v < 0.28 && u > 0.25 && u < 0.75) {
+      r = 55; g = 245; b = 115; // Bright green EXIT sign
+    } else if (Math.abs(u - 0.5) < 0.06) {
+      r = 220; g = 185; b = 50;
+    }
+  }
+
+  if (side === 1) {
+    r = Math.floor(r * 0.78);
+    g = Math.floor(g * 0.78);
+    b = Math.floor(b * 0.78);
+  }
+  // Red alarm tint if alarm active
+  if (gameState.alarmTimer > 0 && Math.floor( performance.now() / 220 ) % 2 === 0) {
+    r = Math.min(255, r + 55);
+  }
+  return { r, g, b };
+}
+
+function render3DScene() {
+  const cam = getActiveCameraTransform();
+  const horizon = Math.floor(H * 0.5 + cam.pitch * H * 0.75);
+
+  // 1. Draw Ceiling & Floor bands with N64 distance fog
+  for (let y = 0; y < H; y++) {
+    const isCeiling = y < horizon;
+    const distFactor = Math.min(1, Math.abs(y - horizon) / (H * 0.55));
+    if (player.inVent && !gameState.inCutscene) {
+      // Inside Metallic Overhead Air Vent
+      const shade = Math.floor(32 + distFactor * 75);
+      ctx.fillStyle = isCeiling ? `rgb(${shade},${shade+6},${shade+12})` : `rgb(${shade-8},${shade},${shade+8})`;
+    } else if (cam.floor === 2) {
+      if (isCeiling) {
+        const c = Math.floor(28 + distFactor * 52);
+        ctx.fillStyle = `rgb(${c},${c+4},${c+10})`;
+      } else {
+        const c = Math.floor(34 + distFactor * 68);
+        ctx.fillStyle = `rgb(${c+6},${c+4},${c})`;
+      }
+    } else {
+      // Floor 1 Warehouse/Control
+      if (isCeiling) {
+        const c = Math.floor(22 + distFactor * 44);
+        ctx.fillStyle = `rgb(${c},${c+5},${c+8})`;
+      } else {
+        const c = Math.floor(30 + distFactor * 58);
+        ctx.fillStyle = `rgb(${c},${c+3},${c+5})`;
+      }
+    }
+    ctx.fillRect(0, y, W, 1);
+  }
+
+  // 2. Raycast Walls for current floor (or Vent duct if inside overhead vent)
+  const fov = 1.04; // ~60 deg
+  const dirX = -Math.sin(cam.yaw);
+  const dirZ = Math.cos(cam.yaw);
+  const planeX = Math.cos(cam.yaw) * Math.tan(fov * 0.5);
+  const planeZ = Math.sin(cam.yaw) * Math.tan(fov * 0.5);
+
+  const posX = cam.x / TILE_SIZE;
+  const posZ = cam.z / TILE_SIZE;
+
+  const stripW = 2; // 2px columns for authentic crisp N64 frame rate & look
+  for (let x = 0; x < W; x += stripW) {
+    const cameraX = 2 * x / W - 1;
+    const rayDirX = dirX + planeX * cameraX;
+    const rayDirZ = dirZ + planeZ * cameraX;
+
+    let mapX = Math.floor(posX);
+    let mapZ = Math.floor(posZ);
+
+    const deltaDistX = Math.abs(rayDirX) < 1e-6 ? 1e30 : Math.abs(1 / rayDirX);
+    const deltaDistZ = Math.abs(rayDirZ) < 1e-6 ? 1e30 : Math.abs(1 / rayDirZ);
+
+    let stepX, sideDistX;
+    let stepZ, sideDistZ;
+
+    if (rayDirX < 0) {
+      stepX = -1;
+      sideDistX = (posX - mapX) * deltaDistX;
+    } else {
+      stepX = 1;
+      sideDistX = (mapX + 1.0 - posX) * deltaDistX;
+    }
+    if (rayDirZ < 0) {
+      stepZ = -1;
+      sideDistZ = (posZ - mapZ) * deltaDistZ;
+    } else {
+      stepZ = 1;
+      sideDistZ = (mapZ + 1.0 - posZ) * deltaDistZ;
+    }
+
+    let hit = 0;
+    let side = 0;
+    let hitCode = 1;
+    let steps = 0;
+
+    while (hit === 0 && steps < 42) {
+      steps++;
+      if (sideDistX < sideDistZ) {
+        sideDistX += deltaDistX;
+        mapX += stepX;
+        side = 0;
+      } else {
+        sideDistZ += deltaDistZ;
+        mapZ += stepZ;
+        side = 1;
+      }
+
+      if (player.inVent && !gameState.inCutscene) {
+        // Vent shaft spans tiles (2..4, 2..4) above 2F Bathroom
+        if (mapX < 2 || mapX > 4 || mapZ < 2 || mapZ > 4) {
+          hit = 1;
+          hitCode = 1;
+        }
+      } else {
+        const code = getTile(cam.floor, mapX, mapZ);
+        if (code > 0) {
+          if (code === 8 || code === 9) {
+            if (!isDoorOpenAt(cam.floor, mapX, mapZ)) {
+              hit = 1;
+              hitCode = code;
+            }
+          } else {
+            hit = 1;
+            hitCode = code;
+          }
+        }
+      }
+    }
+
+    let perpWallDist = side === 0 ? (sideDistX - deltaDistX) : (sideDistZ - deltaDistZ);
+    if (perpWallDist < 0.08) perpWallDist = 0.08;
+    const worldDist = perpWallDist * TILE_SIZE;
+    zBuffer[x] = worldDist;
+    if (x + 1 < W) zBuffer[x + 1] = worldDist;
+
+    const wallScale = (player.inVent && !gameState.inCutscene) ? 0.58 : 1.05;
+    const lineHeight = Math.floor((H / perpWallDist) * wallScale);
+    const drawStart = Math.floor(horizon - lineHeight * 0.5);
+    const drawEnd = Math.floor(horizon + lineHeight * 0.5);
+
+    let wallU;
+    if (side === 0) wallU = posZ + perpWallDist * rayDirZ;
+    else wallU = posX + perpWallDist * rayDirX;
+    wallU -= Math.floor(wallU);
+
+    // Draw vertical wall strip in 4 vertical bands for N64 texture detail
+    const bands = 5;
+    const bandH = (drawEnd - drawStart) / bands;
+    const fog = Math.max(0.18, 1 - perpWallDist / 24);
+
+    for (let bIdx = 0; bIdx < bands; bIdx++) {
+      const v = (bIdx + 0.5) / bands;
+      const col = sampleWallStyle(hitCode, side, wallU, v, cam.floor);
+      const r = Math.floor(col.r * fog);
+      const g = Math.floor(col.g * fog);
+      const b = Math.floor(col.b * fog);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const y0 = Math.floor(drawStart + bIdx * bandH);
+      const y1 = Math.ceil(drawStart + (bIdx + 1) * bandH);
+      ctx.fillRect(x, y0, stripW, y1 - y0);
+    }
+  }
+
+  // If player is in the 2F Air Vent, draw the Bathroom Drop Grate Hatch on the floor at (4.0, 4.0)
+  if (player.inVent && !gameState.inCutscene) {
+    draw3DFloorMarker(cam, 4.0 * TILE_SIZE, 7.2, 4.0 * TILE_SIZE, "#52d1e8", "VENT DROP HATCH -> 2F BATHROOM [PRESS E]");
+  }
+
+  // 3. Collect and depth-sort all 3D Objects on current floor:
+  //    - Low-Poly 3D Guards (with White Armband & Blue Sheriff Star)
+  //    - Evidence Pickups (Rotating 3D Classified Dossiers/Tapes)
+  //    - Interactive Room Terminals & Props (Bathroom Stalls, Science Lab Vats, Control Room Hack Console, Utility HVAC Smoke Port, Stairwell Ramps, Security Cameras, Smoke Clouds)
+  const renderList = [];
+
+  // Guards on active floor
+  for (const g of guards) {
+    if (g.floor !== cam.floor) continue;
+    const dist = Math.hypot(g.x - cam.x, g.z - cam.z);
+    renderList.push({ type: 'guard', dist, data: g });
+  }
+
+  // Evidence on active floor
+  for (const ev of evidenceItems) {
+    if (ev.collected || ev.floor !== cam.floor) continue;
+    const dist = Math.hypot(ev.x - cam.x, ev.z - cam.z);
+    renderList.push({ type: 'evidence', dist, data: ev });
+  }
+
+  // Security cameras on active floor
+  for (const sc of cameras) {
+    if (sc.floor !== cam.floor) continue;
+    const dist = Math.hypot(sc.x - cam.x, sc.z - cam.z);
+    renderList.push({ type: 'camera', dist, data: sc });
+  }
+
+  // Interactive Terminals & Room Props
+  const props = getPropsForFloor(cam.floor);
+  for (const p of props) {
+    const dist = Math.hypot(p.x - cam.x, p.z - cam.z);
+    renderList.push({ type: 'prop', dist, data: p });
+  }
+
+  // Active Smoke Clouds
+  for (const sm of smokeClouds) {
+    if (sm.floor !== cam.floor) continue;
+    const dist = Math.hypot(sm.x - cam.x, sm.z - cam.z);
+    renderList.push({ type: 'smoke', dist, data: sm });
+  }
+
+  // Sort back-to-front (Painter's algorithm clipped against wall zBuffer)
+  renderList.sort((a, b) => b.dist - a.dist);
+
+  for (const item of renderList) {
+    if (item.type === 'guard') drawLowPolyGuard3D(cam, horizon, item.data);
+    else if (item.type === 'evidence') drawLowPolyEvidence3D(cam, horizon, item.data);
+    else if (item.type === 'camera') drawLowPolyCamera3D(cam, horizon, item.data);
+    else if (item.type === 'prop') drawLowPolyProp3D(cam, horizon, item.data);
+    else if (item.type === 'smoke') drawSmokeCloud3D(cam, horizon, item.data);
+  }
+
+  // 4. Draw First-Person 3D Low-Poly Weapon Viewmodel (unless in cutscene)
+  if (!gameState.inCutscene) {
+    drawFirstPersonWeapon3D();
+  }
+}
+
+function getPropsForFloor(floor) {
+  if (floor === 2) {
+    return [
+      { kind: 'stall', label: "BATHROOM STALL #1", x: 2.6 * TILE_SIZE, z: 2.6 * TILE_SIZE, color: "#cfd8dc" },
+      { kind: 'stall', label: "BATHROOM STALL #2", x: 3.8 * TILE_SIZE, z: 2.6 * TILE_SIZE, color: "#cfd8dc" },
+      { kind: 'lab_vat', label: "BIO-SPECIMEN TANK ALPHA", x: 18.2 * TILE_SIZE, z: 2.8 * TILE_SIZE, color: "#38c864" },
+      { kind: 'lab_cipher', label: "LAB CIPHER NOTE [E]", x: 20.8 * TILE_SIZE, z: 3.5 * TILE_SIZE, color: "#52d1e8" },
+      { kind: 'stairs_down', label: "WEST STAIRS TO 1F [E / WALK]", x: 3.5 * TILE_SIZE, z: 17.8 * TILE_SIZE, color: "#e8b838" },
+      { kind: 'stairs_down', label: "EAST STAIRS TO 1F [E / WALK]", x: 20.5 * TILE_SIZE, z: 17.8 * TILE_SIZE, color: "#e8b838" }
+    ];
+  } else {
+    return [
+      { kind: 'control_terminal', label: "MAINFRAME HACK CONSOLE [E]", x: 11.5 * TILE_SIZE, z: 3.6 * TILE_SIZE, color: "#52d1e8" },
+      { kind: 'utility_hvac', label: "UTILITY HVAC SMOKE INTAKE [E]", x: 3.8 * TILE_SIZE, z: 3.5 * TILE_SIZE, color: "#f09028" },
+      { kind: 'lab_vat', label: "CRYO CHEMICAL VAT", x: 18.5 * TILE_SIZE, z: 3.2 * TILE_SIZE, color: "#38c864" },
+      { kind: 'stairs_up', label: "WEST STAIRS TO 2F [E / WALK]", x: 3.5 * TILE_SIZE, z: 17.8 * TILE_SIZE, color: "#e8b838" },
+      { kind: 'stairs_up', label: "EAST STAIRS TO 2F [E / WALK]", x: 20.5 * TILE_SIZE, z: 17.8 * TILE_SIZE, color: "#e8b838" },
+      { kind: 'exit_beacon', label: "WAREHOUSE BACK EXIT DOOR [E]", x: 11.5 * TILE_SIZE, z: 18.5 * TILE_SIZE, color: "#38c864" }
+    ];
+  }
+}
+
+// Helper to project a 3D point into 640x400 canvas coordinates
+function projectToCanvas(wx, wy, wz, cam, horizon) {
+  const dx = wx - cam.x;
+  const dz = wz - cam.z;
+  const cosY = Math.cos(cam.yaw);
+  const sinY = Math.sin(cam.yaw);
+  const rx = -dx * sinY + dz * cosY;
+  const rz = dx * cosY + dz * sinY;
+  if (rz <= 0.2) return null;
+
+  const fovScale = Math.tan(1.04 * 0.5);
+  const sx = (W * 0.5) + (rx / (rz * fovScale)) * (W * 0.5);
+  const scale = (H / (rz / TILE_SIZE));
+  const floorBaseY = cam.floor === 2 ? 4.5 : 0.0;
+  const relY = wy - (floorBaseY + 1.55);
+  const sy = horizon - (relY / 2.6) * scale;
+  return { sx, sy, rz, scale };
+}
+
+function draw3DFloorMarker(cam, wx, wy, wz, color, label) {
+  const p = projectToCanvas(wx, wy - 0.5, wz, cam, Math.floor(H * 0.5 + cam.pitch * H * 0.75));
+  if (!p) return;
+  const w = Math.max(18, Math.min(180, p.scale * 0.55));
+  const h = Math.max(10, Math.min(90, p.scale * 0.25));
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.fillStyle = "rgba(10, 25, 38, 0.75)";
+  ctx.fillRect(p.sx - w * 0.5, p.sy - h * 0.5, w, h);
+  ctx.strokeRect(p.sx - w * 0.5, p.sy - h * 0.5, w, h);
+  // Draw vent louver bars
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(p.sx - w * 0.45, p.sy + i * (h * 0.16));
+    ctx.lineTo(p.sx + w * 0.45, p.sy + i * (h * 0.16));
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 10px Courier New";
+  ctx.textAlign = "center";
+  ctx.fillText(label, p.sx, p.sy - h * 0.65);
+  ctx.restore();
+}
+
+// ============================================================================
+// DRAW LOW-POLY 3D GUARD (N64 BLOCKY CHARACTER WITH WHITE ARMBAND + BLUE SHERIFF STAR)
+// ============================================================================
+function drawLowPolyGuard3D(cam, horizon, g) {
+  const floorY = g.floor === 2 ? 4.5 : 0.0;
+  const p = projectToCanvas(g.x, floorY + 1.0, g.z, cam, horizon);
+  if (!p || p.rz > 65) return;
+
+  const colX = Math.floor(p.sx);
+  if (colX >= 0 && colX < W && zBuffer[colX] < p.rz - 0.4) return;
+
+  const spriteH = Math.max(16, Math.min(340, p.scale * 0.92));
+  const spriteW = spriteH * 0.48;
+  const cx = p.sx;
+  const bottomY = horizon + spriteH * 0.48;
+
+  ctx.save();
+
+  if (!g.alive) {
+    // Eliminated low-poly guard lying flat on the floor
+    ctx.fillStyle = "#3a4034";
+    ctx.fillRect(cx - spriteW * 0.9, bottomY - spriteH * 0.16, spriteW * 1.8, spriteH * 0.15);
+    // White armband with blue star still visible on fallen guard
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(cx - spriteW * 0.2, bottomY - spriteH * 0.15, spriteW * 0.32, spriteH * 0.12);
+    ctx.fillStyle = "#1458d8";
+    ctx.font = `bold ${Math.max(8, Math.floor(spriteH * 0.12))}px Courier New`;
+    ctx.textAlign = "center";
+    ctx.fillText("★", cx - spriteW * 0.04, bottomY - spriteH * 0.05);
+    ctx.restore();
+    return;
+  }
+
+  const stride = (g.state === 'patrol' || g.state === 'alert' || g.state === 'distracted')
+    ? Math.sin(performance.now() * 0.008 + g.animPhase) * (spriteH * 0.06)
+    : 0;
+
+  // 1. Low-poly Boots & Legs (Dark charcoal jackboots + olive trousers)
+  const legW = spriteW * 0.34;
+  const legH = spriteH * 0.36;
+  ctx.fillStyle = "#2b3027";
+  ctx.fillRect(cx - spriteW * 0.38, bottomY - legH + stride, legW, legH);
+  ctx.fillRect(cx + spriteW * 0.04, bottomY - legH - stride, legW, legH);
+  // Jackboots
+  ctx.fillStyle = "#141618";
+  ctx.fillRect(cx - spriteW * 0.38, bottomY - legH * 0.42 + stride, legW, legH * 0.42);
+  ctx.fillRect(cx + spriteW * 0.04, bottomY - legH * 0.42 - stride, legW, legH * 0.42);
+
+  // 2. Blocky N64 Torso (Authoritarian dark olive-grey uniform tunic with Sam Browne belt)
+  const torsoY = bottomY - legH - spriteH * 0.36;
+  const torsoH = spriteH * 0.38;
+  const torsoW = spriteW * 0.88;
+
+  // Polygon faceted chest shading
+  ctx.fillStyle = g.id === 3 ? "#d8dee3" : "#3f463a"; // Dr. Richter wears white lab coat over uniform!
+  ctx.beginPath();
+  ctx.moveTo(cx - torsoW * 0.55, torsoY);
+  ctx.lineTo(cx + torsoW * 0.55, torsoY);
+  ctx.lineTo(cx + torsoW * 0.44, torsoY + torsoH);
+  ctx.lineTo(cx - torsoW * 0.44, torsoY + torsoH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#181b16";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Cross-chest strap & belt
+  ctx.fillStyle = "#1a1714";
+  ctx.fillRect(cx - torsoW * 0.45, torsoY + torsoH * 0.82, torsoW * 0.9, torsoH * 0.14);
+  ctx.fillStyle = "#d4af37"; // Belt buckle
+  ctx.fillRect(cx - torsoW * 0.09, torsoY + torsoH * 0.82, torsoW * 0.18, torsoH * 0.14);
+
+  // 3. Arms + PROMINENT WHITE ARMBAND WITH BLUE SHERIFF STAR!
+  const armW = spriteW * 0.26;
+  const armH = spriteH * 0.33;
+  const leftArmX = cx - torsoW * 0.55 - armW * 0.85;
+  const rightArmX = cx + torsoW * 0.55 - armW * 0.15;
+
+  ctx.fillStyle = g.id === 3 ? "#cfd6dc" : "#363d32";
+  ctx.fillRect(leftArmX, torsoY + spriteH * 0.02, armW, armH);
+  ctx.fillRect(rightArmX, torsoY + spriteH * 0.02, armW, armH);
+
+  // WHITE ARMBAND on both sleeves so visible from any angle
+  const bandY = torsoY + armH * 0.25;
+  const bandH = Math.max(6, armH * 0.38);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(leftArmX - 1, bandY, armW + 2, bandH);
+  ctx.fillRect(rightArmX - 1, bandY, armW + 2, bandH);
+  ctx.strokeStyle = "#1c499c";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(leftArmX - 1, bandY, armW + 2, bandH);
+  ctx.strokeRect(rightArmX - 1, bandY, armW + 2, bandH);
+
+  // 6-POINTED BLUE SHERIFF STAR ON THE WHITE ARMBAND
+  ctx.fillStyle = "#1055e0";
+  const starSize = Math.max(7, Math.floor(bandH * 0.95));
+  ctx.font = `bold ${starSize}px Courier New`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("★", leftArmX + armW * 0.5, bandY + bandH * 0.54);
+  ctx.fillText("★", rightArmX + armW * 0.5, bandY + bandH * 0.54);
+
+  // Also draw a breast-pocket Blue Sheriff Star badge so player sees it clearly head-on
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(cx + torsoW * 0.1, torsoY + torsoH * 0.2, torsoW * 0.26, torsoH * 0.26);
+  ctx.fillStyle = "#1055e0";
+  ctx.font = `bold ${Math.max(8, Math.floor(torsoH * 0.26))}px Courier New`;
+  ctx.fillText("★", cx + torsoW * 0.23, torsoY + torsoH * 0.34);
+
+  // 4. Low-Poly Weapon in Guard's Hand (KF7 / Pistol)
+  ctx.fillStyle = "#181c20";
+  ctx.fillRect(rightArmX + armW * 0.2, torsoY + armH * 0.65, spriteW * 0.42, spriteH * 0.07);
+
+  // 5. Blocky N64 Head & Peaked Officer Cap
+  const headW = spriteW * 0.48;
+  const headH = spriteH * 0.22;
+  const headY = torsoY - headH;
+  ctx.fillStyle = "#d9a986"; // N64 low-poly skin tone
+  ctx.fillRect(cx - headW * 0.5, headY, headW, headH);
+  ctx.strokeStyle = "#221a14";
+  ctx.strokeRect(cx - headW * 0.5, headY, headW, headH);
+
+  // Eyes / Sunglasses
+  ctx.fillStyle = "#15181c";
+  ctx.fillRect(cx - headW * 0.32, headY + headH * 0.35, headW * 0.22, headH * 0.16);
+  ctx.fillRect(cx + headW * 0.10, headY + headH * 0.35, headW * 0.22, headH * 0.16);
+
+  // Peaked Officer Cap with Blue Star Insignia
+  ctx.fillStyle = "#252b22";
+  ctx.beginPath();
+  ctx.moveTo(cx - headW * 0.68, headY + headH * 0.12);
+  ctx.lineTo(cx + headW * 0.68, headY + headH * 0.12);
+  ctx.lineTo(cx + headW * 0.52, headY - headH * 0.42);
+  ctx.lineTo(cx - headW * 0.52, headY - headH * 0.42);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#111";
+  ctx.fillRect(cx - headW * 0.62, headY + headH * 0.04, headW * 1.24, headH * 0.14);
+  ctx.fillStyle = "#3a88ff";
+  ctx.fillRect(cx - 2, headY - headH * 0.22, 4, 4);
+
+  ctx.restore();
+}
+
+function drawLowPolyEvidence3D(cam, horizon, ev) {
+  const floorY = ev.floor === 2 ? 4.5 : 0.0;
+  const bob = Math.sin(performance.now() * 0.004 + ev.id) * 0.12;
+  const p = projectToCanvas(ev.x, floorY + 0.9 + bob, ev.z, cam, horizon);
+  if (!p || p.rz > 55) return;
+
+  const colX = Math.floor(p.sx);
+  if (colX >= 0 && colX < W && zBuffer[colX] < p.rz - 0.3) return;
+
+  const sz = Math.max(12, Math.min(95, p.scale * 0.32));
+  ctx.save();
+  // Desk/Pedestal under evidence
+  ctx.fillStyle = "#4a3b2c";
+  ctx.fillRect(p.sx - sz * 0.8, p.sy + sz * 0.3, sz * 1.6, sz * 0.9);
+  ctx.strokeStyle = "#1c1610";
+  ctx.strokeRect(p.sx - sz * 0.8, p.sy + sz * 0.3, sz * 1.6, sz * 0.9);
+
+  // Glowing Low-Poly Classified Folder / Tape
+  ctx.fillStyle = ev.color;
+  ctx.beginPath();
+  ctx.moveTo(p.sx, p.sy - sz * 0.65);
+  ctx.lineTo(p.sx + sz * 0.65, p.sy - sz * 0.1);
+  ctx.lineTo(p.sx, p.sy + sz * 0.35);
+  ctx.lineTo(p.sx - sz * 0.65, p.sy - sz * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+
+  if (p.rz < 18) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px Courier New";
+    ctx.textAlign = "center";
+    ctx.fillText(`EVIDENCE #${ev.id} [E]`, p.sx, p.sy - sz * 0.85);
+  }
+  ctx.restore();
+}
+
+function drawLowPolyCamera3D(cam, horizon, sc) {
+  const floorY = sc.floor === 2 ? 4.5 : 0.0;
+  const p = projectToCanvas(sc.x, floorY + 2.35, sc.z, cam, horizon);
+  if (!p || p.rz > 45) return;
+  const colX = Math.floor(p.sx);
+  if (colX >= 0 && colX < W && zBuffer[colX] < p.rz - 0.3) return;
+
+  const sz = Math.max(8, Math.min(60, p.scale * 0.22));
+  ctx.save();
+  ctx.fillStyle = "#2b323b";
+  ctx.fillRect(p.sx - sz * 0.6, p.sy - sz * 0.4, sz * 1.2, sz * 0.8);
+  ctx.strokeStyle = "#aab4c0";
+  ctx.strokeRect(p.sx - sz * 0.6, p.sy - sz * 0.4, sz * 1.2, sz * 0.8);
+  // Camera lens LED (Red if active, dark if disabled by hack)
+  ctx.fillStyle = sc.active ? "#ff2a2a" : "#38c864";
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, sz * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLowPolyProp3D(cam, horizon, prop) {
+  const floorY = cam.floor === 2 ? 4.5 : 0.0;
+  const p = projectToCanvas(prop.x, floorY + 1.0, prop.z, cam, horizon);
+  if (!p || p.rz > 50) return;
+  const colX = Math.floor(p.sx);
+  if (colX >= 0 && colX < W && zBuffer[colX] < p.rz - 0.45) return;
+
+  const sz = Math.max(14, Math.min(160, p.scale * 0.45));
+  ctx.save();
+  if (prop.kind === 'lab_vat') {
+    ctx.fillStyle = "rgba(45, 225, 115, 0.55)";
+    ctx.fillRect(p.sx - sz * 0.45, p.sy - sz * 0.9, sz * 0.9, sz * 1.8);
+    ctx.strokeStyle = "#8ef7b4";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(p.sx - sz * 0.45, p.sy - sz * 0.9, sz * 0.9, sz * 1.8);
+  } else if (prop.kind === 'control_terminal' || prop.kind === 'utility_hvac' || prop.kind === 'lab_cipher') {
+    ctx.fillStyle = "#1c2633";
+    ctx.fillRect(p.sx - sz * 0.65, p.sy - sz * 0.5, sz * 1.3, sz * 1.1);
+    ctx.strokeStyle = prop.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(p.sx - sz * 0.65, p.sy - sz * 0.5, sz * 1.3, sz * 1.1);
+  } else if (prop.kind === 'stairs_down' || prop.kind === 'stairs_up') {
+    // Draw 3D stepped staircase geometry
+    for (let s = 0; s < 4; s++) {
+      ctx.fillStyle = s % 2 === 0 ? "#6c757d" : "#495057";
+      ctx.fillRect(p.sx - sz * 0.8, p.sy - sz * 0.4 + s * (sz * 0.25), sz * 1.6, sz * 0.24);
+    }
+  } else if (prop.kind === 'exit_beacon') {
+    ctx.fillStyle = "rgba(56, 200, 100, 0.28)";
+    ctx.fillRect(p.sx - sz * 0.9, p.sy - sz * 0.9, sz * 1.8, sz * 1.8);
+  }
+  if (p.rz < 16) {
+    ctx.fillStyle = prop.color;
+    ctx.font = "bold 9px Courier New";
+    ctx.textAlign = "center";
+    ctx.fillText(prop.label, p.sx, p.sy - sz * 0.68);
+  }
+  ctx.restore();
+}
+
+function drawSmokeCloud3D(cam, horizon, sm) {
+  const floorY = sm.floor === 2 ? 4.5 : 0.0;
+  const p = projectToCanvas(sm.x, floorY + 1.1, sm.z, cam, horizon);
+  if (!p) return;
+  const r = Math.max(25, Math.min(240, p.scale * 0.9));
+  ctx.save();
+  ctx.fillStyle = "rgba(175, 195, 180, 0.46)";
+  ctx.beginPath();
+  ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================================
+// FIRST-PERSON 3D LOW-POLY WEAPON VIEWMODEL (CLASSIC GOLDENEYE 007 ANGLE)
+// ============================================================================
+function drawFirstPersonWeapon3D() {
+  const swayX = Math.cos(player.bobPhase * 0.5) * 10;
+  const swayY = Math.abs(Math.sin(player.bobPhase)) * 8 + player.weaponKick * 18;
+  const baseX = W * 0.70 + swayX;
+  const baseY = H * 0.78 + swayY;
+
+  ctx.save();
+
+  // Muzzle Flash
+  if (player.muzzleFlash > 0) {
+    ctx.fillStyle = "#ffdd55";
+    ctx.beginPath();
+    ctx.moveTo(baseX - 38, baseY - 58);
+    ctx.lineTo(baseX - 18, baseY - 95);
+    ctx.lineTo(baseX - 4, baseY - 62);
+    ctx.lineTo(baseX + 26, baseY - 82);
+    ctx.lineTo(baseX + 2, baseY - 44);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (player.weaponIdx === 0) {
+    // PP7 Silenced (Classic GoldenEye angled dark steel pistol + long cylindrical suppressor)
+    // Suppressor barrel
+    ctx.fillStyle = "#1c2026";
+    ctx.beginPath();
+    ctx.moveTo(baseX - 36, baseY - 66);
+    ctx.lineTo(baseX - 16, baseY - 74);
+    ctx.lineTo(baseX + 20, baseY - 22);
+    ctx.lineTo(baseX - 2, baseY - 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#495464";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Receiver Slide
+    ctx.fillStyle = "#2f3640";
+    ctx.beginPath();
+    ctx.moveTo(baseX - 6, baseY - 26);
+    ctx.lineTo(baseX + 24, baseY - 38);
+    ctx.lineTo(baseX + 75, baseY + 35);
+    ctx.lineTo(baseX + 38, baseY + 48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (player.weaponIdx === 1) {
+    // KF7 Soviet ("Pencil" Rifle)
+    ctx.fillStyle = "#191c20";
+    ctx.beginPath();
+    ctx.moveTo(baseX - 48, baseY - 78);
+    ctx.lineTo(baseX - 28, baseY - 85);
+    ctx.lineTo(baseX + 65, baseY + 40);
+    ctx.lineTo(baseX + 32, baseY + 50);
+    ctx.closePath();
+    ctx.fill();
+    // Wood handguard
+    ctx.fillStyle = "#6e472b";
+    ctx.fillRect(baseX - 12, baseY - 30, 42, 36);
+  } else if (player.weaponIdx === 2) {
+    // Tactical Smoke Canister
+    ctx.fillStyle = "#486b58";
+    ctx.fillRect(baseX - 18, baseY - 42, 46, 75);
+    ctx.strokeStyle = "#e8b838";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(baseX - 18, baseY - 42, 46, 75);
+    ctx.fillStyle = "#e8b838";
+    ctx.font = "bold 10px Courier New";
+    ctx.fillText("SMOKE", baseX - 10, baseY - 5);
+  } else {
+    // 00-Slap / Electronic Decoder Unit
+    ctx.fillStyle = "#22303f";
+    ctx.fillRect(baseX - 24, baseY - 36, 62, 68);
+    ctx.fillStyle = "#38c864";
+    ctx.fillRect(baseX - 16, baseY - 26, 46, 26);
+  }
+
+  ctx.restore();
+}
+
+// ============================================================================
+// TOP-RIGHT RADAR / MINIMAP RENDERER
+// ============================================================================
+function renderRadar() {
+  const f = gameState.radarFloorView;
+  const grid = f === 2 ? FLOOR2_GRID : FLOOR1_GRID;
+  rctx.fillStyle = "#06110b";
+  rctx.fillRect(0, 0, radarCanvas.width, radarCanvas.height);
+
+  const cw = radarCanvas.width / MAP_W;
+  const ch = radarCanvas.height / MAP_H;
+
+  for (let r = 0; r < MAP_H; r++) {
+    for (let c = 0; c < MAP_W; c++) {
+      const code = grid[r][c];
+      if (code === 0) continue;
+      if (code === 8) rctx.fillStyle = "#52d1e8";
+      else if (code === 9) rctx.fillStyle = "#e8b838";
+      else rctx.fillStyle = "#1f4d33";
+      rctx.fillRect(c * cw, r * ch, cw - 0.5, ch - 0.5);
+    }
+  }
+
+  // Draw uncollected Evidence on this floor
+  for (const ev of evidenceItems) {
+    if (ev.collected || ev.floor !== f) continue;
+    rctx.fillStyle = "#52d1e8";
+    rctx.fillRect((ev.x / TILE_SIZE) * cw - 2.5, (ev.z / TILE_SIZE) * ch - 2.5, 5, 5);
+  }
+
+  // Draw Living Guards on this floor
+  for (const g of guards) {
+    if (!g.alive || g.floor !== f) continue;
+    rctx.fillStyle = g.state === 'alert' ? "#ff2222" : (g.state === 'distracted' ? "#f09028" : "#ff6b6b");
+    rctx.beginPath();
+    rctx.arc((g.x / TILE_SIZE) * cw, (g.z / TILE_SIZE) * ch, 2.8, 0, Math.PI * 2);
+    rctx.fill();
+  }
+
+  // Draw Player if on this floor
+  if (player.floor === f) {
+    const px = (player.x / TILE_SIZE) * cw;
+    const pz = (player.z / TILE_SIZE) * ch;
+    rctx.fillStyle = "#38c864";
+    rctx.beginPath();
+    rctx.arc(px, pz, 3.5, 0, Math.PI * 2);
+    rctx.fill();
+    rctx.strokeStyle = "#38c864";
+    rctx.beginPath();
+    rctx.moveTo(px, pz);
+    rctx.lineTo(px - Math.sin(player.yaw) * 9, pz + Math.cos(player.yaw) * 9);
+    rctx.stroke();
+  }
+}
+
+// ============================================================================
+// CONTEXT INTERACTION SYSTEM (VENT DROP, DOORS, EVIDENCE, HACK, SMOKE, EXIT)
+// ============================================================================
+let currentContextAction = null;
+
+function checkContextInteractions() {
+  const promptEl = document.getElementById('interaction-prompt');
+  currentContextAction = null;
+
+  if (gameState.inCutscene || !gameState.running) {
+    promptEl.style.display = 'none';
+    return;
+  }
+
+  // 1. Inside 2F Overhead Vent -> Drop into 2F Bathroom!
+  if (player.inVent) {
+    currentContextAction = {
+      label: "DROP OUT OF OVERHEAD VENT INTO 2F BATHROOM",
+      exec: () => {
+        player.inVent = false;
+        player.y = 4.5;
+        player.x = 3.8 * TILE_SIZE;
+        player.z = 3.8 * TILE_SIZE;
+        gameState.ventDropped = true;
+        playSound('door');
+        setBanner("DROPPED INTO 2F BATHROOM — SNEAK PAST OR ELIMINATE BLUE-STAR GUARDS");
+        updateHUD();
+      }
+    };
+  }
+
+  // 2. Check nearby Evidence Pickups
+  if (!currentContextAction) {
+    for (const ev of evidenceItems) {
+      if (!ev.collected && ev.floor === player.floor) {
+        const d = Math.hypot(ev.x - player.x, ev.z - player.z);
+        if (d < 4.2) {
+          currentContextAction = {
+            label: `GRAB EVIDENCE: ${ev.title} (+2,500 PTS | -12% EVASIVENESS | +2 GUARDS)`,
+            exec: () => collectEvidence(ev)
+          };
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Check 2F Science Lab Cipher Note & Lab Cutscene
+  if (!currentContextAction && player.floor === 2) {
+    const dCipher = Math.hypot(20.8 * TILE_SIZE - player.x, 3.5 * TILE_SIZE - player.z);
+    if (dCipher < 4.2 && !gameState.hasLabCipher) {
+      currentContextAction = {
+        label: "GRAB MAINFRAME SECURITY CIPHER & OVERHEAR LAB CUTSCENE",
+        exec: () => {
+          gameState.hasLabCipher = true;
+          gameState.score += 500;
+          playSound('pickup');
+          setBanner("ACQUIRED LAB CIPHER! 1F CONTROL ROOM HACK RISK REDUCED!");
+          startCutscene('science_lab_cutscene');
+          updateHUD();
+        }
+      };
+    }
+  }
+
+  // 4. Check 1F Control Room Hack Terminal
+  if (!currentContextAction && player.floor === 1) {
+    const dCtrl = Math.hypot(11.5 * TILE_SIZE - player.x, 3.6 * TILE_SIZE - player.z);
+    if (dCtrl < 4.5 && !gameState.controlsHacked) {
+      const riskPct = gameState.hasLabCipher ? "12% BACKFIRE RISK (CIPHER READY)" : "35% BACKFIRE RISK";
+      currentContextAction = {
+        label: `HACK 1F CONTROL ROOM MAINFRAME (UNLOCK ALL DOORS & DISABLE CAMERAS — ${riskPct})`,
+        exec: () => executeControlRoomHack()
+      };
+    }
+  }
+
+  // 5. Check 1F Utility Room HVAC Smoke Bomb Plant
+  if (!currentContextAction && player.floor === 1) {
+    const dUtil = Math.hypot(3.8 * TILE_SIZE - player.x, 3.5 * TILE_SIZE - player.z);
+    if (dUtil < 4.5 && !gameState.smokePlanted) {
+      currentContextAction = {
+        label: "PLANT SMOKE BOMB IN UTILITY HVAC INTAKE (DISTRACTS WAREHOUSE EXIT GUARDS)",
+        exec: () => executePlantUtilitySmoke()
+      };
+    }
+  }
+
+  // 6. Check Stairwells (2F <-> 1F)
+  if (!currentContextAction) {
+    const dWestStair = Math.hypot(3.5 * TILE_SIZE - player.x, 17.8 * TILE_SIZE - player.z);
+    const dEastStair = Math.hypot(20.5 * TILE_SIZE - player.x, 17.8 * TILE_SIZE - player.z);
+    if (dWestStair < 4.2 || dEastStair < 4.2) {
+      const targetFloor = player.floor === 2 ? 1 : 2;
+      currentContextAction = {
+        label: `TAKE STAIRWELL TO FLOOR ${targetFloor} (${targetFloor === 1 ? '1F CONTROL / UTILITY / WAREHOUSE EXIT' : '2F BATHROOM / LABS / OFFICES'})`,
+        exec: () => {
+          player.floor = targetFloor;
+          player.y = targetFloor === 2 ? 4.5 : 0.0;
+          gameState.radarFloorView = targetFloor;
+          playSound('door');
+          setBanner(`MOVED TO FLOOR ${targetFloor} VIA STAIRWELL`);
+          updateHUD();
+        }
+      };
+    }
+  }
+
+  // 7. Check 1F Warehouse Back Exit Door
+  if (!currentContextAction && player.floor === 1) {
+    const dExit = Math.hypot(11.5 * TILE_SIZE - player.x, 18.2 * TILE_SIZE - player.z);
+    if (dExit < 5.2) {
+      currentContextAction = {
+        label: `ESCAPE BUILDING VIA WAREHOUSE BACK EXIT DOOR (EVIDENCE: ${gameState.evidenceCount}/6)`,
+        exec: () => triggerMissionVictory()
+      };
+    }
+  }
+
+  // 8. Check nearby Sliding Doors
+  if (!currentContextAction) {
+    for (const d of doors) {
+      if (d.floor !== player.floor) continue;
+      const dist = Math.hypot(d.x - player.x, d.z - player.z);
+      if (dist < 4.2 && d.openAmount < 0.5) {
+        currentContextAction = {
+          label: d.isExit ? "OPEN WAREHOUSE BACK EXIT DOOR & EXTRACT" : "OPEN SECURITY BULKHEAD DOOR",
+          exec: () => {
+            if (d.isExit) {
+              triggerMissionVictory();
+            } else {
+              d.opening = true;
+              d.timer = 6.0;
+              playSound('door');
+            }
+          }
+        };
+        break;
+      }
+    }
+  }
+
+  if (currentContextAction) {
+    promptEl.style.display = 'block';
+    promptEl.innerHTML = `<span class="key-pill">[E]</span> ${currentContextAction.label}`;
+  } else {
+    promptEl.style.display = 'none';
+  }
+}
+
+function triggerContextInteraction() {
+  if (currentContextAction) {
+    currentContextAction.exec();
+  }
+}
+
+function collectEvidence(ev) {
+  ev.collected = true;
+  gameState.evidenceCount++;
+  gameState.score += 2500;
+  // Reduce player evasiveness and spawn extra patrol guards!
+  gameState.evasiveness = Math.max(20, 100 - gameState.evidenceCount * 12);
+  spawnReinforcementGuards(gameState.evidenceCount);
+  playSound('pickup');
+  flashScreen("rgba(82, 209, 232, 0.35)");
+  setBanner(`EVIDENCE ${gameState.evidenceCount}/6 GRABBED! EVASIVENESS REDUCED TO ${gameState.evasiveness}% | +2 PATROL GUARDS DEPLOYED!`);
+  updateHUD();
+}
+
+function executeControlRoomHack() {
+  gameState.controlsHacked = true;
+  const backfireChance = gameState.hasLabCipher ? 0.12 : 0.35;
+  const roll = Math.random();
+
+  if (roll < backfireChance) {
+    // Hack backfires!
+    gameState.hackBackfired = true;
+    gameState.alarmTimer = 18.0;
+    spawnReinforcementGuards(gameState.evidenceCount + 1);
+    for (const g of guards) {
+      if (g.floor === 1 && g.alive) g.state = 'alert';
+    }
+    playSound('alarm');
+    flashScreen("rgba(220, 40, 40, 0.5)");
+    setBanner("⚠ CONTROL ROOM HACK BACKFIRED! ALARM TRIGGERED & GUARDS ALERTED!");
+    startCutscene('hack_backfire_cutscene');
+  } else {
+    // Hack succeeds! Unlock all doors and disable all cameras!
+    gameState.score += 1500;
+    for (const sc of cameras) sc.active = false;
+    for (const d of doors) {
+      d.opening = true;
+      d.openAmount = 1.0;
+      d.timer = 999;
+    }
+    playSound('pickup');
+    flashScreen("rgba(56, 200, 100, 0.35)");
+    setBanner("MAINFRAME HACK SUCCESSFUL! ALL CAMERAS DISABLED & ALL DOORS UNLOCKED!");
+    startCutscene('hack_success_cutscene');
+  }
+  updateHUD();
+}
+
+function executePlantUtilitySmoke() {
+  gameState.smokePlanted = true;
+  gameState.score += 1500;
+  // Spawn smoke clouds in Utility Room and Main Warehouse Bay
+  smokeClouds.push(
+    { floor: 1, x: 3.8 * TILE_SIZE, z: 3.5 * TILE_SIZE },
+    { floor: 1, x: 11.5 * TILE_SIZE, z: 14.5 * TILE_SIZE },
+    { floor: 1, x: 11.5 * TILE_SIZE, z: 16.8 * TILE_SIZE }
+  );
+  // Lure Warehouse Exit guards away from the Back Door toward Utility corridor!
+  for (const g of guards) {
+    if (g.floor === 1 && g.alive && g.z > 12 * TILE_SIZE) {
+      g.state = 'distracted';
+      g.homeX = 4.5 * TILE_SIZE;
+      g.homeZ = 7.5 * TILE_SIZE;
+    }
+  }
+  playSound('door');
+  flashScreen("rgba(180, 210, 190, 0.38)");
+  setBanner("SMOKE BOMB PLANTED IN UTILITY HVAC! WAREHOUSE EXIT GUARDS LURED AWAY!");
+  startCutscene('smoke_planted_cutscene');
+  updateHUD();
+}
+
+// ============================================================================
+// COMBAT, SHOOTING & GUARD AI UPDATE
+// ============================================================================
+function fireWeapon() {
+  if (!gameState.running || gameState.paused || gameState.inCutscene) return;
+  if (weaponCooldownTimer > 0) return;
+
+  const w = WEAPONS[player.weaponIdx];
+  if (w.ammo <= 0) {
+    setBanner("OUT OF AMMO — SWITCH WEAPON [1-4]");
+    return;
+  }
+
+  weaponCooldownTimer = w.cooldown;
+  if (player.weaponIdx === 2) {
+    // Throw Smoke Canister right here
+    w.ammo--;
+    smokeClouds.push({
+      floor: player.floor,
+      x: player.x - Math.sin(player.yaw) * 3.5,
+      z: player.z + Math.cos(player.yaw) * 3.5
+    });
+    for (const g of guards) {
+      if (g.floor === player.floor && g.alive && Math.hypot(g.x - player.x, g.z - player.z) < 15) {
+        g.state = 'distracted';
+      }
+    }
+    playSound('door');
+    setBanner("DEPLOYED TACTICAL SMOKE CANISTER — NEARBY GUARDS BLINDED!");
+    updateHUD();
+    return;
+  }
+
+  if (player.weaponIdx < 2) w.ammo--;
+  gameState.shotsFired++;
+  player.muzzleFlash = 0.09;
+  player.weaponKick = 1.0;
+  playSound(player.weaponIdx === 0 ? 'pp7' : 'kf7');
+
+  // If unsilenced weapon (KF7), alert guards on current floor
+  if (!w.silent) {
+    for (const g of guards) {
+      if (g.floor === player.floor && g.alive && Math.hypot(g.x - player.x, g.z - player.z) < 28) {
+        g.state = 'alert';
+      }
+    }
+  }
+
+  // Hitscan ray against guards on current floor
+  let bestGuard = null;
+  let bestDist = player.weaponIdx === 3 ? 4.2 : 55.0; // Slap is melee range
+
+  for (const g of guards) {
+    if (!g.alive || g.floor !== player.floor) continue;
+    const dx = g.x - player.x;
+    const dz = g.z - player.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > bestDist) continue;
+
+    const angleToGuard = Math.atan2(-dx, dz);
+    let angleDiff = angleToGuard - player.yaw;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+    const hitCone = Math.max(0.08, 0.42 / (dist / TILE_SIZE));
+    if (Math.abs(angleDiff) < hitCone) {
+      bestDist = dist;
+      bestGuard = g;
+    }
+  }
+
+  if (bestGuard) {
+    gameState.shotsHit++;
+    bestGuard.health -= w.damage;
+    bestGuard.state = 'alert';
+    if (bestGuard.health <= 0) {
+      bestGuard.alive = false;
+      bestGuard.currentBubbleText = null;
+      gameState.guardsEliminated++;
+      gameState.score += 400;
+      setBanner(`ELIMINATED ${bestGuard.name.toUpperCase()} (+400 PTS)`);
+    } else {
+      bestGuard.currentBubbleText = "Ugh! Taking fire!";
+      bestGuard.bubbleTimer = 1.5;
+    }
+  }
+
+  updateHUD();
+}
+
+function updateGuardsAndCameras(dt) {
+  if (gameState.inCutscene) return;
+
+  // Update doors
+  for (const d of doors) {
+    if (d.opening) {
+      d.openAmount = Math.min(1, d.openAmount + dt * 2.2);
+      d.timer -= dt;
+      if (d.timer <= 0) d.opening = false;
+    } else {
+      d.openAmount = Math.max(0, d.openAmount - dt * 1.4);
+    }
+  }
+
+  if (gameState.alarmTimer > 0) {
+    gameState.alarmTimer = Math.max(0, gameState.alarmTimer - dt);
+  }
+
+  // Detection range scales up as player Evasiveness decreases!
+  const evasivenessPenalty = (100 - gameState.evasiveness) * 0.16;
+  const baseSightDist = (player.inVent ? 0 : 13.5) + evasivenessPenalty;
+
+  // Update Security Cameras
+  for (const sc of cameras) {
+    if (!sc.active || sc.floor !== player.floor || player.inVent) continue;
+    sc.yaw = sc.baseYaw + Math.sin(performance.now() * 0.0012 + sc.id) * 0.85;
+    const d = Math.hypot(sc.x - player.x, sc.z - player.z);
+    if (d < 13.0) {
+      gameState.alarmTimer = 8.0;
+      setBanner("⚠ SPOTTED BY CCTV SECURITY CAMERA! GUARDS ALERTED!");
+      for (const g of guards) {
+        if (g.floor === player.floor && g.alive) g.state = 'alert';
+      }
+    }
+  }
+
+  // Update Guards
+  for (const g of guards) {
+    if (!g.alive) continue;
+
+    if (g.state === 'distracted') {
+      // Move toward Utility HVAC corridor away from Warehouse Exit
+      const dx = g.homeX - g.x;
+      const dz = g.homeZ - g.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 1.2) {
+        const step = 3.2 * dt;
+        const nx = g.x + (dx / dist) * step;
+        const nz = g.z + (dz / dist) * step;
+        if (!isSolidAt(g.floor, nx, g.z)) g.x = nx;
+        if (!isSolidAt(g.floor, g.x, nz)) g.z = nz;
+        g.yaw = Math.atan2(-dx, dz);
+      }
+      continue;
+    }
+
+    if (g.state === 'patrol') {
+      g.patrolAngle += dt * 0.55;
+      const vx = Math.cos(g.patrolAngle) * 1.8 * dt;
+      const vz = Math.sin(g.patrolAngle) * 1.8 * dt;
+      if (!isSolidAt(g.floor, g.x + vx, g.z)) g.x += vx;
+      else g.patrolAngle += 1.5;
+      if (!isSolidAt(g.floor, g.x, g.z + vz)) g.z += vz;
+      else g.patrolAngle += 1.5;
+    }
+
+    // Check if guard spots player on same floor
+    if (g.floor === player.floor && !player.inVent) {
+      const dx = player.x - g.x;
+      const dz = player.z - g.z;
+      const dist = Math.hypot(dx, dz);
+
+      // Check if smoke cloud is obscuring
+      const inSmoke = smokeClouds.some(sm => sm.floor === g.floor && Math.hypot(sm.x - g.x, sm.z - g.z) < 7.5);
+
+      if (!inSmoke && dist < baseSightDist) {
+        // Line of sight check (4 steps)
+        let blocked = false;
+        for (let s = 0.25; s < 1.0; s += 0.25) {
+          if (isSolidAt(g.floor, g.x + dx * s, g.z + dz * s)) {
+            blocked = true;
+            break;
+          }
+        }
+        if (!blocked) {
+          g.state = 'alert';
+        }
+      }
+
+      if (g.state === 'alert' && !inSmoke) {
+        g.yaw = Math.atan2(-dx, dz);
+        if (dist > 4.5 && dist < 24) {
+          const step = 2.6 * dt;
+          const nx = g.x + (dx / dist) * step;
+          const nz = g.z + (dz / dist) * step;
+          if (!isSolidAt(g.floor, nx, g.z)) g.x = nx;
+          if (!isSolidAt(g.floor, g.x, nz)) g.z = nz;
+        }
+        g.shootCooldown -= dt;
+        if (g.shootCooldown <= 0 && dist < 21) {
+          g.shootCooldown = 1.35 + Math.random() * 0.7;
+          // Guard fires at player
+          playSound('pp7');
+          const dmg = 7;
+          if (player.armor > 0) {
+            player.armor = Math.max(0, player.armor - dmg);
+          } else {
+            player.health = Math.max(0, player.health - dmg);
+          }
+          flashScreen("rgba(212, 56, 40, 0.35)");
+          updateHUD();
+          if (player.health <= 0) {
+            triggerMissionFailure();
+          }
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// PLAYER MOVEMENT & INPUT HANDLING
+// ============================================================================
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+
+  if (gameState.inCutscene) {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      advanceCutscene();
+    } else if (e.code === 'Escape') {
+      e.preventDefault();
+      endCutscene();
+    }
+    return;
+  }
+
+  if (e.code === 'KeyE') triggerContextInteraction();
+  else if (e.code === 'KeyF') fireWeapon();
+  else if (e.code === 'KeyC') triggerNearestGuardCutscene();
+  else if (e.code === 'KeyT') cycleConversationTopic();
+  else if (e.code === 'KeyM') {
+    gameState.radarFloorView = gameState.radarFloorView === 2 ? 1 : 2;
+    updateHUD();
+  } else if (e.code === 'Digit1') selectWeapon(0);
+  else if (e.code === 'Digit2') selectWeapon(1);
+  else if (e.code === 'Digit3') selectWeapon(2);
+  else if (e.code === 'Digit4') selectWeapon(3);
+  else if (e.code === 'Tab' || e.code === 'KeyP') {
+    e.preventDefault();
+    togglePauseModal();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+canvas.addEventListener('mousedown', (e) => {
+  if (!gameState.running || gameState.paused || gameState.inCutscene) return;
+  if (document.pointerLockElement !== canvas) {
+    try { canvas.requestPointerLock(); } catch (err) {}
+  } else if (e.button === 0) {
+    fireWeapon();
+  }
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === canvas && gameState.running && !gameState.paused && !gameState.inCutscene) {
+    player.yaw -= e.movementX * 0.0028;
+    player.pitch = Math.max(-0.42, Math.min(0.42, player.pitch - e.movementY * 0.0022));
+  }
+});
+
+function updatePlayerMovement(dt) {
+  if (!gameState.running || gameState.paused || gameState.inCutscene) return;
+
+  if (weaponCooldownTimer > 0) weaponCooldownTimer = Math.max(0, weaponCooldownTimer - dt);
+  if (player.muzzleFlash > 0) player.muzzleFlash = Math.max(0, player.muzzleFlash - dt);
+  if (player.weaponKick > 0) player.weaponKick = Math.max(0, player.weaponKick - dt * 5);
+
+  // Keyboard turning support (Q/E or Left/Right arrows or J/L)
+  const turnSpeed = 2.1 * dt;
+  if (keys['ArrowLeft'] || keys['KeyQ'] || keys['KeyJ']) player.yaw += turnSpeed;
+  if (keys['ArrowRight'] || keys['KeyL']) player.yaw -= turnSpeed;
+
+  let moveForward = 0;
+  let moveStrafe = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) moveForward += 1;
+  if (keys['KeyS'] || keys['ArrowDown']) moveForward -= 1;
+  if (keys['KeyA']) moveStrafe -= 1;
+  if (keys['KeyD']) moveStrafe += 1;
+
+  if (moveForward !== 0 || moveStrafe !== 0) {
+    const speed = (player.inVent ? 4.2 : 6.4) * dt;
+    const fx = -Math.sin(player.yaw) * moveForward + Math.cos(player.yaw) * moveStrafe;
+    const fz = Math.cos(player.yaw) * moveForward + Math.sin(player.yaw) * moveStrafe;
+    const len = Math.hypot(fx, fz) || 1;
+    const dx = (fx / len) * speed;
+    const dz = (fz / len) * speed;
+
+    if (player.inVent) {
+      // Bound inside 2F overhead vent (tiles 2..4, 2..4)
+      const nx = Math.max(2.2 * TILE_SIZE, Math.min(4.8 * TILE_SIZE, player.x + dx));
+      const nz = Math.max(2.2 * TILE_SIZE, Math.min(4.8 * TILE_SIZE, player.z + dz));
+      player.x = nx;
+      player.z = nz;
+      // Auto-drop if player crawls directly over the open vent drop hatch at (4.0, 4.0)
+      if (Math.hypot(player.x - 4.0 * TILE_SIZE, player.z - 4.0 * TILE_SIZE) < 1.35) {
+        player.inVent = false;
+        player.y = 4.5;
+        gameState.ventDropped = true;
+        playSound('door');
+        setBanner("DROPPED OUT OF OVERHEAD VENT INTO 2F BATHROOM!");
+        updateHUD();
+      }
+    } else {
+      const margin = 0.65;
+      if (!isSolidAt(player.floor, player.x + dx + Math.sign(dx) * margin, player.z)) {
+        player.x += dx;
+      }
+      if (!isSolidAt(player.floor, player.x, player.z + dz + Math.sign(dz) * margin)) {
+        player.z += dz;
+      }
+    }
+    player.bobPhase += dt * 9.5;
+  }
+}
+
+// ============================================================================
+// HUD, TELEPORT SHORTCUTS & DOSSIER MODALS
+// ============================================================================
+function initSideBars() {
+  const hCol = document.getElementById('health-bar-col');
+  const aCol = document.getElementById('armor-bar-col');
+  hCol.innerHTML = '';
+  aCol.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const hs = document.createElement('div');
+    hs.className = 'ge-bar-segment active';
+    hs.style.background = i < 3 ? '#d43828' : (i < 5 ? '#f09028' : '#38c864');
+    hCol.appendChild(hs);
+
+    const as = document.createElement('div');
+    as.className = 'ge-bar-segment active';
+    as.style.background = '#2a74d8';
+    aCol.appendChild(as);
+  }
+}
+
+function getSectorName(floor, x, z, inVent) {
+  if (inVent) return "2F - OVERHEAD AIR VENT";
+  const tx = Math.floor(x / TILE_SIZE);
+  const tz = Math.floor(z / TILE_SIZE);
+  if (floor === 2) {
+    if (tx <= 6 && tz <= 6) return "2F - RESTROOM / BATHROOM";
+    if (tx >= 8 && tx <= 14 && tz <= 6) return "2F - EXECUTIVE OFFICE";
+    if (tx >= 16 && tz <= 7) return "2F - SCIENCE LAB ALPHA";
+    if (tx <= 6 && tz >= 9 && tz <= 13) return "2F - RECORDS ANNEX";
+    if (tx >= 9 && tx <= 13 && tz >= 9 && tz <= 13) return "2F - BIO-LAB ANNEX";
+    if (tz >= 16) return "2F - STAIRWELL LANDING";
+    return "2F - MAZE CORRIDOR";
+  } else {
+    if (tx <= 6 && tz <= 6) return "1F - UTILITY & HVAC ROOM";
+    if (tx >= 8 && tx <= 14 && tz <= 6) return "1F - MAIN CONTROL ROOM";
+    if (tx >= 16 && tz <= 6) return "1F - CRYO SCIENCE LAB B";
+    if (tx >= 4 && tx <= 18 && tz >= 12) return "1F - MAIN WAREHOUSE EXIT BAY";
+    if (tz >= 16) return "1F - STAIRWELL LANDING";
+    return "1F - LOWER MAZE HALLWAY";
+  }
+}
+
+function updateHUD() {
+  document.getElementById('hud-sector').textContent = getSectorName(player.floor, player.x, player.z, player.inVent);
+  document.getElementById('hud-evidence').textContent = `${gameState.evidenceCount} / ${gameState.totalEvidence}`;
+
+  const evEl = document.getElementById('hud-evasiveness');
+  const evLabel = gameState.evasiveness >= 85 ? "GHOST" : (gameState.evasiveness >= 60 ? "CAUTIOUS" : "COMPROMISED");
+  evEl.textContent = `${gameState.evasiveness}% (${evLabel})`;
+  evEl.style.color = gameState.evasiveness >= 80 ? "#38c864" : (gameState.evasiveness >= 55 ? "#f09028" : "#ff4d4d");
+
+  const activeGuardsCount = guards.filter(g => g.alive).length;
+  document.getElementById('hud-guards').textContent = `${activeGuardsCount}`;
+  document.getElementById('hud-score').textContent = gameState.score.toLocaleString();
+
+  // Health & Armor segments
+  const hSegs = document.querySelectorAll('#health-bar-col .ge-bar-segment');
+  const aSegs = document.querySelectorAll('#armor-bar-col .ge-bar-segment');
+  const hCount = Math.ceil((player.health / 100) * 8);
+  const aCount = Math.ceil((player.armor / 100) * 8);
+  hSegs.forEach((el, idx) => el.classList.toggle('active', idx < hCount));
+  aSegs.forEach((el, idx) => el.classList.toggle('active', idx < aCount));
+
+  // Weapon panel
+  const w = WEAPONS[player.weaponIdx];
+  document.getElementById('weapon-name').textContent = w.name;
+  document.getElementById('weapon-ammo').textContent = player.weaponIdx === 3 ? "READY" : `${w.ammo} / ${w.reserve}`;
+  document.getElementById('weapon-sub').textContent = w.desc;
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`wslot-${i}`).classList.toggle('active', i === player.weaponIdx);
+  }
+
+  // Objectives checklist
+  const setObj = (id, done, text) => {
+    const el = document.getElementById(id);
+    el.classList.toggle('done', done);
+    el.innerHTML = `<span>${done ? '[X]' : '[ ]'}</span><span>${text}</span>`;
+  };
+  setObj('obj-1', gameState.ventDropped, "a. Drop from Vent into 2F Bathroom");
+  setObj('obj-2', gameState.evidenceCount > 0, `b. Grab War Crimes & Political Evidence (${gameState.evidenceCount}/6)`);
+  setObj('obj-3', gameState.smokePlanted || gameState.controlsHacked, "c. Plant Smoke in Utility Rm OR Hack Control Rm");
+  setObj('obj-4', gameState.missionComplete, "d. Escape via 1F Warehouse Back Exit Door");
+
+  document.getElementById('radar-floor-label').textContent =
+    `RADAR: ${gameState.radarFloorView}F ${gameState.radarFloorView === 2 ? 'UPPER' : 'LOWER'}`;
+}
+
+function selectWeapon(idx) {
+  player.weaponIdx = idx;
+  updateHUD();
+}
+
+function setBanner(msg) {
+  const b = document.getElementById('hud-banner');
+  b.textContent = msg;
+}
+
+function flashScreen(color) {
+  const fl = document.getElementById('flash-overlay');
+  fl.style.background = color;
+  fl.style.opacity = '1';
+  setTimeout(() => { fl.style.opacity = '0'; }, 180);
+}
+
+function teleportToSpot(spot) {
+  gameState.paused = false;
+  gameState.running = true;
+  document.getElementById('dossier-modal').style.display = 'none';
+  if (spot === 'vent') {
+    player.floor = 2; player.inVent = true; player.y = 7.2;
+    player.x = 3.5 * TILE_SIZE; player.z = 2.5 * TILE_SIZE; player.yaw = 0.4;
+  } else if (spot === 'lab2f') {
+    player.floor = 2; player.inVent = false; player.y = 4.5; gameState.ventDropped = true;
+    player.x = 18.8 * TILE_SIZE; player.z = 5.5 * TILE_SIZE; player.yaw = 3.14;
+  } else if (spot === 'office2f') {
+    player.floor = 2; player.inVent = false; player.y = 4.5; gameState.ventDropped = true;
+    player.x = 11.5 * TILE_SIZE; player.z = 4.8 * TILE_SIZE; player.yaw = 3.14;
+  } else if (spot === 'stairs') {
+    player.floor = 2; player.inVent = false; player.y = 4.5; gameState.ventDropped = true;
+    player.x = 3.5 * TILE_SIZE; player.z = 16.5 * TILE_SIZE; player.yaw = 0;
+  } else if (spot === 'control1f') {
+    player.floor = 1; player.inVent = false; player.y = 0.0; gameState.ventDropped = true;
+    player.x = 11.5 * TILE_SIZE; player.z = 5.0 * TILE_SIZE; player.yaw = 3.14;
+  } else if (spot === 'utility1f') {
+    player.floor = 1; player.inVent = false; player.y = 0.0; gameState.ventDropped = true;
+    player.x = 3.8 * TILE_SIZE; player.z = 5.0 * TILE_SIZE; player.yaw = 3.14;
+  } else if (spot === 'warehouse1f') {
+    player.floor = 1; player.inVent = false; player.y = 0.0; gameState.ventDropped = true;
+    player.x = 11.5 * TILE_SIZE; player.z = 16.5 * TILE_SIZE; player.yaw = 0;
+  }
+  gameState.radarFloorView = player.floor;
+  updateHUD();
+}
+
+function resumeOrStartGame() {
+  document.getElementById('dossier-modal').style.display = 'none';
+  if (gameState.missionComplete || gameState.missionFailed) {
+    resetFullMission();
+  }
+  gameState.running = true;
+  gameState.paused = false;
+  updateHUD();
+}
+
+function startMissionWithIntroCutscene() {
+  resumeOrStartGame();
+  startCutscene('intro_vent');
+}
+
+function togglePauseModal() {
+  const modal = document.getElementById('dossier-modal');
+  if (modal.style.display === 'none') {
+    gameState.paused = true;
+    if (document.pointerLockElement) document.exitPointerLock();
+    modal.style.display = 'flex';
+  } else {
+    resumeOrStartGame();
+  }
+}
+
+function triggerMissionVictory() {
+  gameState.missionComplete = true;
+  gameState.paused = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+
+  const evBonus = gameState.evidenceCount * 2500;
+  const stealthBonus = gameState.evasiveness * 20;
+  const totalFinalScore = gameState.score + stealthBonus + 3000;
+
+  const debriefBox = document.getElementById('debrief-summary-box');
+  debriefBox.style.display = 'block';
+  debriefBox.innerHTML = `
+    <h3>007 Extraction Debriefing — MISSION ACCOMPLISHED</h3>
+    <ul class="dossier-list">
+      <li><b>Extraction Status:</b> ESCAPED VIA 1F WAREHOUSE BACK EXIT DOOR</li>
+      <li><b>War Crimes & Political Evidence Recovered:</b> <b>${gameState.evidenceCount} / 6</b> (+${evBonus.toLocaleString()} pts)</li>
+      <li><b>Final Evasiveness Rating:</b> <b>${gameState.evasiveness}%</b> (Stealth Bonus: +${stealthBonus.toLocaleString()} pts)</li>
+      <li><b>Tactical Sabotage:</b> Smoke Bomb Planted: <b>${gameState.smokePlanted ? 'YES' : 'NO'}</b> | Control Room Hacked: <b>${gameState.controlsHacked ? (gameState.hackBackfired ? 'BACKFIRED' : 'SUCCESS') : 'NO'}</b></li>
+      <li><b>Blue-Star Guards Eliminated:</b> ${gameState.guardsEliminated} | <b>Total Mission Score:</b> <span style="color:#e8b838;font-size:15px;font-weight:900;">${totalFinalScore.toLocaleString()} PTS</span></li>
+    </ul>
+  `;
+  document.getElementById('dossier-stamp-text').textContent = "MISSION COMPLETED // 00-AGENT";
+  document.getElementById('dossier-primary-btn').textContent = "▶ REPLAY MISSION";
+  document.getElementById('dossier-modal').style.display = 'flex';
+  playSound('pickup');
+}
+
+function triggerMissionFailure() {
+  gameState.missionFailed = true;
+  gameState.paused = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  document.getElementById('dossier-stamp-text').textContent = "KILLED IN ACTION // RETRY";
+  document.getElementById('dossier-primary-btn').textContent = "▶ RESTART IN 2F VENT";
+  document.getElementById('dossier-modal').style.display = 'flex';
+}
+
+function resetFullMission() {
+  gameState.missionComplete = false;
+  gameState.missionFailed = false;
+  gameState.score = 0;
+  gameState.evidenceCount = 0;
+  gameState.evasiveness = 100;
+  gameState.guardsEliminated = 0;
+  gameState.smokePlanted = false;
+  gameState.controlsHacked = false;
+  gameState.hackBackfired = false;
+  gameState.hasLabCipher = false;
+  gameState.ventDropped = false;
+  player.x = 3.5 * TILE_SIZE;
+  player.y = 7.2;
+  player.z = 2.5 * TILE_SIZE;
+  player.floor = 2;
+  player.inVent = true;
+  player.health = 100;
+  player.armor = 100;
+  smokeClouds = [];
+  document.getElementById('debrief-summary-box').style.display = 'none';
+  initWorldEntities();
+  updateHUD();
+}
+
+// ============================================================================
+// MAIN GAME LOOP
+// ============================================================================
+let lastTime = performance.now();
+
+function gameLoop(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  if (gameState.running && !gameState.paused) {
+    updatePlayerMovement(dt);
+    updateGuardsAndCameras(dt);
+    updateSmallTalkAndBubbles(dt);
+    checkContextInteractions();
+  }
+
+  render3DScene();
+  renderRadar();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// Initialize everything on load
+initSideBars();
+initWorldEntities();
+updateHUD();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
